@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/finml-sage/agent-swarm-protocol/schemas/types/swarm-settings.json",
+  "title": "Swarm Settings",
+  "description": "Configurable settings for swarm behavior",
+  "type": "object",
+  "required": ["allow_member_invite", "require_approval"],
+  "properties": {
+    "allow_member_invite": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, any member can generate invite tokens; if false, only master can invite"
+    },
+    "require_approval": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, master must approve join requests; if false, valid invite tokens auto-accept"
+    }
+  }
+}

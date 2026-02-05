@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/finml-sage/agent-swarm-protocol/schemas/types/swarm-membership.json",
+  "title": "Swarm Membership",
+  "description": "An agent's membership record for a single swarm",
+  "type": "object",
+  "required": ["swarm_id", "name", "master", "members", "joined_at", "settings"],
+  "properties": {
+    "swarm_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for this swarm"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "description": "Human-readable name for the swarm"
+    },
+    "master": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Agent ID of the swarm master who can invite and kick members"
+    },
+    "members": {
+      "type": "array",
+      "description": "List of all swarm members including the master",
+      "items": {
+        "$ref": "member.json"
+      },
+      "minItems": 1
+    },
+    "joined_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp when this agent joined the swarm"
+    },
+    "settings": {
+      "$ref": "swarm-settings.json"
+    }
+  }
+}
