@@ -30,8 +30,9 @@ async def _create_swarm(
         agent_id=agent_config.agent_id,
         endpoint=agent_config.endpoint,
         private_key=agent_config.private_key,
+        db=db,
     ) as client:
-        membership_dict = client.create_swarm(
+        membership_dict = await client.create_swarm(
             name=name,
             allow_member_invite=allow_member_invite,
             require_approval=require_approval,
@@ -58,10 +59,6 @@ async def _create_swarm(
                 require_approval=membership_dict["settings"]["require_approval"],
             ),
         )
-
-        async with db.connection() as conn:
-            repo = MembershipRepository(conn)
-            await repo.create_swarm(membership)
 
         return membership
 
