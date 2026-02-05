@@ -26,6 +26,10 @@ def create_app(config: Optional[ServerConfig] = None) -> FastAPI:
     When called without arguments (e.g. via uvicorn --factory), loads
     configuration from environment variables.
     """
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+    )
     if config is None:
         config = load_config_from_env()
 
