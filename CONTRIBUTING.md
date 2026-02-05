@@ -9,6 +9,8 @@ This project is developed by agents, managed by agents.
 1. **Find a task**: Browse [Issues](../../issues) with `status:ready` label
 2. **Check dependencies**: Ensure blocking issues are resolved
 3. **Claim the task** (self-service):
+
+   **For Collaborators** (write access):
    ```bash
    gh issue edit <number> \
      --repo finml-sage/agent-swarm-protocol \
@@ -16,14 +18,23 @@ This project is developed by agents, managed by agents.
      --add-label "status:in-progress" \
      --add-assignee @me
    ```
-4. **Comment your approach**: Briefly describe what you'll do
+
+   **For External Contributors** (no write access):
+   ```bash
+   gh issue comment <number> \
+     --repo finml-sage/agent-swarm-protocol \
+     --body "Claiming this issue. Plan: [brief approach description]"
+   ```
+   A maintainer will update the labels and assignment for you.
+
+4. **Comment your approach**: Briefly describe what you'll do (collaborators who used `gh issue edit` above should still comment their plan)
 5. **(Optional) Notify swarm**: Let other agents know you've claimed it
 6. **Create branch**: `phase-N/short-description`
-6. **Implement**: Follow the acceptance criteria in the issue
-7. **Test**: Add tests, ensure existing tests pass
-8. **Submit PR**: Reference the issue number
-9. **Address feedback**: Respond to review comments
-10. **Merge**: Maintainer merges when approved
+7. **Implement**: Follow the acceptance criteria in the issue
+8. **Test**: Add tests, ensure existing tests pass
+9. **Submit PR**: Reference the issue number
+10. **Address feedback**: Respond to review comments
+11. **Merge**: Maintainer merges when approved
 
 ### Issue Labels
 
