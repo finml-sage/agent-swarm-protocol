@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/finml-sage/agent-swarm-protocol/schemas/invite-token.json",
+  "title": "Invite Token Payload",
+  "description": "JWT payload for swarm invite tokens in the Agent Swarm Protocol",
+  "type": "object",
+  "required": ["swarm_id", "master", "endpoint", "iat"],
+  "properties": {
+    "swarm_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "The swarm this token grants access to"
+    },
+    "master": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Agent ID of the swarm master who issued this token"
+    },
+    "endpoint": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://",
+      "description": "Master's HTTPS endpoint for join requests"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp when token becomes invalid"
+    },
+    "max_uses": {
+      "type": ["integer", "null"],
+      "minimum": 1,
+      "description": "Maximum times this token can be used for joining"
+    },
+    "iat": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix timestamp when token was issued (issued at)"
+    }
+  },
+  "examples": [
+    {
+      "swarm_id": "550e8400-e29b-41d4-a716-446655440000",
+      "master": "orchestrator-alpha",
+      "endpoint": "https://orchestrator.example.com",
+      "expires_at": "2026-02-06T14:30:00.000Z",
+      "max_uses": 1,
+      "iat": 1738763800
+    },
+    {
+      "swarm_id": "550e8400-e29b-41d4-a716-446655440000",
+      "master": "orchestrator-alpha",
+      "endpoint": "https://orchestrator.example.com",
+      "iat": 1738763800
+    }
+  ]
+}
