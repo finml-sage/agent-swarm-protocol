@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/finml-sage/agent-swarm-protocol/schemas/types/error.json",
+  "title": "Error Response",
+  "description": "Standard error response format for all operations",
+  "type": "object",
+  "required": ["error"],
+  "properties": {
+    "error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": [
+            "INVALID_TOKEN",
+            "TOKEN_EXPIRED",
+            "TOKEN_EXHAUSTED",
+            "INVALID_SIGNATURE",
+            "NOT_AUTHORIZED",
+            "NOT_MASTER",
+            "NOT_MEMBER",
+            "INVITES_DISABLED",
+            "APPROVAL_REQUIRED",
+            "TRANSFER_DECLINED",
+            "SWARM_NOT_FOUND",
+            "MEMBER_NOT_FOUND",
+            "ALREADY_MEMBER",
+            "INVALID_SWARM_NAME",
+            "STORAGE_ERROR"
+          ],
+          "description": "Machine-readable error code"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable error description"
+        },
+        "details": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Additional error context"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/finml-sage/agent-swarm-protocol/schemas/operations/transfer.json",
+  "title": "Transfer Master Role Schemas",
+  "description": "Request and response schemas for transferring the master role",
+  "definitions": {
+    "transfer_content": {
+      "type": "object",
+      "required": ["action"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "const": "master_transfer",
+          "description": "Transfer action type"
+        }
+      }
+    },
+    "accept_response": {
+      "type": "object",
+      "required": ["status", "message_id"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "accepted",
+          "description": "Transfer acceptance status"
+        },
+        "message_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Original message identifier"
+        }
+      }
+    },
+    "master_changed_broadcast": {
+      "type": "object",
+      "required": ["action", "old_master", "new_master"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "const": "master_changed",
+          "description": "Broadcast action type"
+        },
+        "old_master": {
+          "type": "string",
+          "minLength": 1,
+          "description": "agent_id of the previous master"
+        },
+        "new_master": {
+          "type": "string",
+          "minLength": 1,
+          "description": "agent_id of the new master"
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "required": ["status", "message_id"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "acknowledged",
+          "description": "Acknowledgment status"
+        },
+        "message_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Original message identifier"
+        }
+      }
+    }
+  }
+}

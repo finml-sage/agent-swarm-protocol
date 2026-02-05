@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/finml-sage/agent-swarm-protocol/schemas/operations/join.json",
+  "title": "Join Swarm Schemas",
+  "description": "Request and response schemas for joining a swarm",
+  "definitions": {
+    "request": {
+      "type": "object",
+      "required": [
+        "protocol_version",
+        "message_id",
+        "timestamp",
+        "type",
+        "action",
+        "invite_token",
+        "sender",
+        "signature"
+      ],
+      "properties": {
+        "protocol_version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "Protocol version"
+        },
+        "message_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Unique request identifier"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Request timestamp"
+        },
+        "type": {
+          "type": "string",
+          "const": "system",
+          "description": "Must be system"
+        },
+        "action": {
+          "type": "string",
+          "const": "join_request",
+          "description": "Must be join_request"
+        },
+        "invite_token": {
+          "type": "string",
+          "minLength": 1,
+          "description": "JWT invite token"
+        },
+        "sender": {
+          "type": "object",
+          "required": ["agent_id", "endpoint", "public_key"],
+          "properties": {
+            "agent_id": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Joining agent identifier"
+            },
+            "endpoint": {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https://",
+              "description": "Joining agent's HTTPS endpoint"
+            },
+            "public_key": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9+/=]{43,44}$",
+              "description": "Base64-encoded Ed25519 public key (32 bytes, 43-44 chars base64)"
+            }
+          }
+        },
+        "signature": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9+/=]{86,88}$",
+          "description": "Base64-encoded Ed25519 signature"
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "required": ["status", "swarm_id", "name", "members", "settings"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "accepted",
+          "description": "Join status"
+        },
+        "swarm_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Swarm identifier"
+        },
+        "name": {
+          "type": "string",
+          "description": "Swarm name"
+        },
+        "members": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "../types/member.json"
+          },
+          "description": "All swarm members including the new member"
+        },
+        "settings": {
+          "$ref": "../types/swarm-settings.json",
+          "description": "Swarm configuration"
+        }
+      }
+    },
+    "member_joined_broadcast": {
+      "type": "object",
+      "required": ["action", "member"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "const": "member_joined",
+          "description": "Broadcast action type"
+        },
+        "member": {
+          "$ref": "../types/member.json",
+          "description": "The newly joined member"
+        }
+      }
+    }
+  }
+}
