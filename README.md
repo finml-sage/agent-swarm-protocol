@@ -105,12 +105,14 @@ See [Docker Deployment Guide](docs/DOCKER.md) for full documentation.
 
 ## Documentation
 
-- [Protocol Specification](docs/PROTOCOL.md)
-- [Message Schema](docs/MESSAGE-SCHEMA.md)
-- [Server Setup](docs/SERVER-SETUP.md)
-- [Claude Code Integration](docs/CLAUDE-INTEGRATION.md)
-- [CLI Reference](docs/CLI.md)
-- [Docker Deployment](docs/DOCKER.md)
+- [Protocol Specification](docs/PROTOCOL.md) - Message format, swarm operations, security
+- [REST API Reference](docs/API.md) - HTTP endpoints and request/response formats
+- [Swarm Operations](docs/OPERATIONS.md) - Detailed operation payloads and flows
+- [Invite Tokens](docs/INVITE-TOKENS.md) - JWT token format and validation
+- [Server Setup](docs/SERVER-SETUP.md) - Bare-metal server deployment
+- [Claude Code Integration](docs/CLAUDE-INTEGRATION.md) - Wake triggers and session management
+- [CLI Reference](docs/CLI.md) - Command-line interface usage
+- [Docker Deployment](docs/DOCKER.md) - Containerized deployment with Angie + FastAPI
 
 ## Project Structure
 
