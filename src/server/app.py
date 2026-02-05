@@ -1,5 +1,7 @@
 """FastAPI application factory."""
-from typing import Optional
+import logging
+from contextlib import asynccontextmanager
+from typing import AsyncIterator, Optional
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
@@ -13,6 +15,9 @@ from src.server.routes.message import create_message_router
 from src.server.routes.join import create_join_router
 from src.server.routes.health import create_health_router
 from src.server.routes.info import create_info_router
+from src.state.database import DatabaseManager
+
+logger = logging.getLogger(__name__)
 
 
 def create_app(config: Optional[ServerConfig] = None) -> FastAPI:
@@ -23,10 +28,21 @@ def create_app(config: Optional[ServerConfig] = None) -> FastAPI:
     """
     if config is None:
         config = load_config_from_env()
+
+    db_manager = DatabaseManager(config.db_path)
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        await db_manager.initialize()
+        logger.info("Database initialized at %s", config.db_path)
+        yield
+        await db_manager.close()
+
     app = FastAPI(
         title="Agent Swarm Protocol",
         description="P2P communication server for autonomous agents",
         version=config.agent.protocol_version,
+        lifespan=lifespan,
     )
     queue = MessageQueue(max_size=config.queue_max_size)
     app.add_middleware(RequestLoggingMiddleware)
@@ -34,7 +50,7 @@ def create_app(config: Optional[ServerConfig] = None) -> FastAPI:
     app.add_exception_handler(SwarmProtocolError, _protocol_error_handler)
     app.add_exception_handler(ValidationError, _validation_error_handler)
     app.include_router(create_message_router(queue))
-    app.include_router(create_join_router())
+    app.include_router(create_join_router(config, db_manager))
     app.include_router(create_health_router(config, queue))
     app.include_router(create_info_router(config))
     return app

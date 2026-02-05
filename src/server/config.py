@@ -1,5 +1,6 @@
 """Server configuration."""
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 import os
 
@@ -26,6 +27,7 @@ class ServerConfig:
     agent: AgentConfig
     rate_limit: RateLimitConfig = field(default_factory=RateLimitConfig)
     queue_max_size: int = 10000
+    db_path: Path = field(default_factory=lambda: Path("data/swarm.db"))
 
 
 def load_config_from_env() -> ServerConfig:
@@ -54,4 +56,5 @@ def load_config_from_env() -> ServerConfig:
             join_requests_per_hour=int(os.environ.get("RATE_LIMIT_JOIN_PER_HOUR", "10")),
         ),
         queue_max_size=int(os.environ.get("QUEUE_MAX_SIZE", "10000")),
+        db_path=Path(os.environ.get("DB_PATH", "data/swarm.db")),
     )
