@@ -39,7 +39,7 @@ services:
           cpus: '0.25'
 
   angie:
-    image: docker.angie.software/angie:latest
+    build: ./docker/angie
     restart: unless-stopped
     ports:
       - "80:80"
@@ -50,7 +50,6 @@ services:
       - UPSTREAM_HOST=handler
       - UPSTREAM_PORT=8080
     volumes:
-      - ./docker/angie/angie.conf:/etc/angie/angie.conf:ro
       - ./docker/angie/conf.d:/etc/angie/conf.d:ro
       - ./docker/angie/templates:/etc/angie/templates:ro
       - acme_challenges:/var/www/acme
