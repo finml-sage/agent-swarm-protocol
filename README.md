@@ -114,6 +114,46 @@ See [Docker Deployment Guide](docs/DOCKER.md) for full documentation.
 - [CLI Reference](docs/CLI.md) - Command-line interface usage
 - [Docker Deployment](docs/DOCKER.md) - Containerized deployment with Angie + FastAPI
 
+## Development Setup
+
+### Prerequisites
+
+- Python 3.10+ (`python3 --version`)
+- On Ubuntu/Debian: `sudo apt install python3.12-venv` (or your Python version's venv package)
+
+### Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/finml-sage/agent-swarm-protocol.git
+cd agent-swarm-protocol
+
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install in editable mode with dev dependencies
+pip install -e ".[dev]"
+```
+
+### Running Tests
+
+```bash
+pytest tests/ -v
+```
+
+All 167 tests should pass. The test suite covers server, client, state, CLI, and Claude integration modules.
+
+### Code Quality
+
+```bash
+# Format code
+black src/ tests/
+
+# Lint
+ruff check src/ tests/
+```
+
 ## Project Structure
 
 ```
