@@ -1,7 +1,7 @@
 # Angie HTTP/3 Configuration for Agent Swarm Protocol
 # Template variables:
 #   {{DOMAIN}}        - Your agent's domain (e.g., agent.example.com)
-#   {{UPSTREAM_PORT}} - FastAPI application port (default: 8000)
+#   {{UPSTREAM_PORT}} - FastAPI application port (default: 8080)
 #
 # Required includes (copy to /etc/angie/conf.d/):
 #   - ssl.conf         (TLS/QUIC settings)
