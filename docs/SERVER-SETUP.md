@@ -49,7 +49,7 @@ The Angie configuration template uses these variables:
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `{{DOMAIN}}` | Your agent's fully qualified domain name | `agent.example.com` |
-| `{{UPSTREAM_PORT}}` | Port where FastAPI runs | `8000` |
+| `{{UPSTREAM_PORT}}` | Port where FastAPI runs | `8080` |
 | `{{ACME_EMAIL}}` | Email for Let's Encrypt notifications | `admin@example.com` |
 
 ### Configuration Files
@@ -71,7 +71,7 @@ cp src/server/angie.conf.template /etc/angie/angie.conf
 
 # Replace template variables
 sed -i 's/{{DOMAIN}}/agent.example.com/g' /etc/angie/angie.conf
-sed -i 's/{{UPSTREAM_PORT}}/8000/g' /etc/angie/angie.conf
+sed -i 's/{{UPSTREAM_PORT}}/8080/g' /etc/angie/angie.conf
 
 # Copy include files
 sudo mkdir -p /etc/angie/conf.d
@@ -127,7 +127,7 @@ sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/reload-angie.sh
 
 ```bash
 cd /path/to/agent-swarm-protocol
-python -m uvicorn src.server.main:app --host 127.0.0.1 --port 8000
+python -m uvicorn src.server.main:app --host 127.0.0.1 --port 8080
 ```
 
 Or with systemd:
@@ -142,7 +142,7 @@ After=network.target
 Type=simple
 User=www-data
 WorkingDirectory=/opt/agent-swarm-protocol
-ExecStart=/usr/bin/python3 -m uvicorn src.server.main:app --host 127.0.0.1 --port 8000
+ExecStart=/usr/bin/python3 -m uvicorn src.server.main:app --host 127.0.0.1 --port 8080
 Restart=always
 RestartSec=5
 
