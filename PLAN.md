@@ -28,12 +28,12 @@ Phase 2: Server                    Phase 3: Client                    Phase 4: S
 **Parallel**: No (foundation for everything)
 
 ### Tasks
-1. [ ] Define message JSON schema with required fields
-2. [ ] Define swarm operations and their payloads
-3. [ ] Define invite token format and validation
-4. [ ] Define membership state schema
-5. [ ] Define endpoint specifications (REST API)
-6. [ ] Write protocol specification document
+1. [x] Define message JSON schema with required fields
+2. [x] Define swarm operations and their payloads
+3. [x] Define invite token format and validation
+4. [x] Define membership state schema
+5. [x] Define endpoint specifications (REST API)
+6. [x] Write protocol specification document
 
 ### Deliverables
 - `docs/PROTOCOL.md`
@@ -49,13 +49,13 @@ Phase 2: Server                    Phase 3: Client                    Phase 4: S
 **Parallel**: Yes (with Phases 3, 4)
 
 ### Tasks
-1. [ ] Angie HTTP/3 configuration template
-2. [ ] Angie ACME (built-in) configuration
-3. [ ] Python message receiver (FastAPI or Flask)
-4. [ ] Message validation against schema
-5. [ ] Request authentication (signature verification)
-6. [ ] Rate limiting and abuse prevention
-7. [ ] Health check endpoint
+1. [x] Angie HTTP/3 configuration template
+2. [x] Angie ACME (built-in) configuration
+3. [x] Python message receiver (FastAPI or Flask)
+4. [x] Message validation against schema
+5. [x] Request authentication (signature verification)
+6. [x] Rate limiting and abuse prevention
+7. [x] Health check endpoint
 
 ### Deliverables
 - `docker/angie/angie.conf` (was `src/server/angie.conf.template`)
@@ -71,13 +71,13 @@ Phase 2: Server                    Phase 3: Client                    Phase 4: S
 **Parallel**: Yes (with Phases 2, 4)
 
 ### Tasks
-1. [ ] Python client library structure
-2. [ ] Send message function
-3. [ ] Swarm operations (create, join, leave, kick)
-4. [ ] Invite token generation and parsing
-5. [ ] Member discovery and endpoint resolution
-6. [ ] Retry logic and error handling
-7. [ ] Message signing with agent's private key
+1. [x] Python client library structure
+2. [x] Send message function
+3. [x] Swarm operations (create, join, leave, kick)
+4. [x] Invite token generation and parsing
+5. [x] Member discovery and endpoint resolution
+6. [x] Retry logic and error handling
+7. [x] Message signing with agent's private key
 
 ### Deliverables
 - `src/client/__init__.py`
@@ -93,12 +93,12 @@ Phase 2: Server                    Phase 3: Client                    Phase 4: S
 **Parallel**: Yes (with Phases 2, 3)
 
 ### Tasks
-1. [ ] SQLite schema for message queue
-2. [ ] Swarm membership storage (JSON or SQLite)
-3. [ ] Mute lists (swarm-level, agent-level)
-4. [ ] Message history with retention policy
-5. [ ] Unread message tracking
-6. [ ] State export/import for portability
+1. [x] SQLite schema for message queue
+2. [x] Swarm membership storage (JSON or SQLite)
+3. [x] Mute lists (swarm-level, agent-level)
+4. [x] Message history with retention policy
+5. [x] Unread message tracking
+6. [x] State export/import for portability
 
 ### Deliverables
 - `src/state/database.py`
@@ -114,12 +114,12 @@ Phase 2: Server                    Phase 3: Client                    Phase 4: S
 **Parallel**: No
 
 ### Tasks
-1. [ ] Swarm subagent definition (SKILL.md format)
-2. [ ] Wake trigger integration (POST to /api/wake)
-3. [ ] Context loader (recent messages, membership state)
-4. [ ] Response handler (send replies via client)
-5. [ ] Notification preferences (what triggers wake)
-6. [ ] Claude Code SDK session management
+1. [x] Swarm subagent definition (SKILL.md format)
+2. [x] Wake trigger integration (POST to /api/wake)
+3. [x] Context loader (recent messages, membership state)
+4. [x] Response handler (send replies via client)
+5. [x] Notification preferences (what triggers wake)
+6. [x] Claude Code SDK session management
 
 ### Deliverables
 - `src/claude/wake_trigger.py`
@@ -137,16 +137,16 @@ Phase 2: Server                    Phase 3: Client                    Phase 4: S
 **Parallel**: Partially (can start after Phase 3)
 
 ### Tasks
-1. [ ] CLI framework setup (Click or Typer)
-2. [ ] `swarm init` - Initialize agent for swarm participation
-3. [ ] `swarm create` - Create new swarm
-4. [ ] `swarm invite` - Generate invite token
-5. [ ] `swarm join` - Join swarm with token
-6. [ ] `swarm leave` - Leave a swarm
-7. [ ] `swarm list` - List swarms and members
-8. [ ] `swarm send` - Send message
-9. [ ] `swarm mute/unmute` - Manage mutes
-10. [ ] `swarm status` - Show connection status
+1. [x] CLI framework setup (Click or Typer)
+2. [x] `swarm init` - Initialize agent for swarm participation
+3. [x] `swarm create` - Create new swarm
+4. [x] `swarm invite` - Generate invite token
+5. [x] `swarm join` - Join swarm with token
+6. [x] `swarm leave` - Leave a swarm
+7. [x] `swarm list` - List swarms and members
+8. [x] `swarm send` - Send message
+9. [x] `swarm mute/unmute` - Manage mutes
+10. [x] `swarm status` - Show connection status
 
 ### Deliverables
 - `src/cli/main.py` (was `cli/swarm.py`)
