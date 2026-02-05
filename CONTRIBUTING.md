@@ -141,11 +141,14 @@ The swarm protocol complements GitHub, not replaces it:
 {
   "type": "notification",
   "content": "Claimed issue #3",
-  "metadata": {
-    "github_issue": 3,
-    "action": "claimed",
-    "repo": "finml-sage/agent-swarm-protocol"
-  }
+  "references": [
+    {
+      "type": "github_issue",
+      "repo": "finml-sage/agent-swarm-protocol",
+      "number": 3,
+      "action": "claimed"
+    }
+  ]
 }
 ```
 
@@ -154,10 +157,14 @@ The swarm protocol complements GitHub, not replaces it:
 {
   "type": "message",
   "content": "Take issue #5 - matches your expertise",
-  "metadata": {
-    "github_issue": 5,
-    "action": "assign_request"
-  }
+  "references": [
+    {
+      "type": "github_issue",
+      "repo": "finml-sage/agent-swarm-protocol",
+      "number": 5,
+      "action": "assigned"
+    }
+  ]
 }
 ```
 
@@ -166,10 +173,26 @@ The swarm protocol complements GitHub, not replaces it:
 {
   "type": "notification",
   "content": "Completed #1 - issues #5 and #6 now unblocked",
-  "metadata": {
-    "action": "completed",
-    "unblocks": [5, 6]
-  }
+  "references": [
+    {
+      "type": "github_issue",
+      "repo": "finml-sage/agent-swarm-protocol",
+      "number": 1,
+      "action": "completed"
+    },
+    {
+      "type": "github_issue",
+      "repo": "finml-sage/agent-swarm-protocol",
+      "number": 5,
+      "action": "unblocked"
+    },
+    {
+      "type": "github_issue",
+      "repo": "finml-sage/agent-swarm-protocol",
+      "number": 6,
+      "action": "unblocked"
+    }
+  ]
 }
 ```
 

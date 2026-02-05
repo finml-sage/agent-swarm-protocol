@@ -110,10 +110,48 @@
         }
       }
     },
+    "references": {
+      "type": "array",
+      "description": "Structured references to external resources (repos, issues, PRs, URLs)",
+      "items": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["github_repo", "github_issue", "github_pr", "github_commit", "url"],
+            "description": "Type of reference"
+          },
+          "repo": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$",
+            "description": "GitHub repo in owner/name format"
+          },
+          "number": {
+            "type": "integer",
+            "description": "Issue or PR number"
+          },
+          "sha": {
+            "type": "string",
+            "description": "Commit SHA"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Full URL for url type references"
+          },
+          "action": {
+            "type": "string",
+            "enum": ["claimed", "completed", "blocked", "unblocked", "assigned", "mention", "review_requested"],
+            "description": "What action relates to this reference"
+          }
+        }
+      }
+    },
     "metadata": {
       "type": "object",
       "additionalProperties": true,
-      "description": "Arbitrary key-value metadata"
+      "description": "Arbitrary key-value metadata (for non-standard extensions)"
     }
   }
 }

@@ -70,6 +70,14 @@ Every message MUST contain these fields:
   "thread_id": "uuid-v4 for grouping",
   "priority": "normal" | "high" | "low",
   "expires_at": "ISO-8601 timestamp",
+  "references": [
+    {
+      "type": "github_issue",
+      "repo": "owner/repo",
+      "number": 123,
+      "action": "claimed"
+    }
+  ],
   "attachments": [
     {
       "type": "url" | "inline",
@@ -80,6 +88,94 @@ Every message MUST contain these fields:
   "metadata": {
     "key": "value"
   }
+}
+```
+
+### 4.3 References Field
+
+The `references` array provides structured links to external resources. This enables coordination across multiple repos and hundreds of issues.
+
+**Reference Types:**
+
+| Type | Required Fields | Description |
+|------|-----------------|-------------|
+| `github_repo` | `repo` | Reference to a repository |
+| `github_issue` | `repo`, `number` | Reference to an issue |
+| `github_pr` | `repo`, `number` | Reference to a pull request |
+| `github_commit` | `repo`, `sha` | Reference to a commit |
+| `url` | `url` | Generic URL reference |
+
+**Actions:**
+
+| Action | Meaning |
+|--------|---------|
+| `claimed` | Agent has taken ownership |
+| `completed` | Work is done |
+| `blocked` | Cannot proceed |
+| `unblocked` | Dependency resolved, ready to work |
+| `assigned` | Orchestrator assigned to agent |
+| `mention` | Referenced but no action |
+| `review_requested` | PR needs review |
+
+**Examples:**
+
+Claiming an issue:
+```json
+{
+  "references": [
+    {
+      "type": "github_issue",
+      "repo": "finml-sage/agent-swarm-protocol",
+      "number": 3,
+      "action": "claimed"
+    }
+  ]
+}
+```
+
+Completing work that unblocks others:
+```json
+{
+  "references": [
+    {
+      "type": "github_issue",
+      "repo": "finml-sage/agent-swarm-protocol",
+      "number": 1,
+      "action": "completed"
+    },
+    {
+      "type": "github_issue",
+      "repo": "finml-sage/agent-swarm-protocol",
+      "number": 5,
+      "action": "unblocked"
+    },
+    {
+      "type": "github_issue",
+      "repo": "finml-sage/agent-swarm-protocol",
+      "number": 6,
+      "action": "unblocked"
+    }
+  ]
+}
+```
+
+Cross-repo coordination:
+```json
+{
+  "references": [
+    {
+      "type": "github_issue",
+      "repo": "finml-sage/agent-swarm-protocol",
+      "number": 9,
+      "action": "blocked"
+    },
+    {
+      "type": "github_issue",
+      "repo": "finml-sage/marbell-content",
+      "number": 2,
+      "action": "mention"
+    }
+  ]
 }
 ```
 
