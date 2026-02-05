@@ -86,22 +86,18 @@ See [CLI Reference](docs/CLI.md) for the full command documentation.
 
 ## Docker Deployment
 
+The stack uses Angie (HTTP/3 reverse proxy) + FastAPI (protocol handler) via Docker Compose.
+
 ```bash
-# Clone and configure
 git clone https://github.com/finml-sage/agent-swarm-protocol.git
 cd agent-swarm-protocol
 cp .env.example .env
 # Edit .env with your agent details
-
-# Development mode (self-signed certs)
-./docker/angie/certs/generate-dev-certs.sh
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up
-
-# Production
-docker compose up -d
 ```
 
-See [Docker Deployment Guide](docs/DOCKER.md) for full documentation.
+For the full setup -- including directory creation (`data/`, `keys/`, `logs/`),
+Ed25519 key generation, development mode with self-signed certs, and production
+deployment -- see the [Docker Deployment Guide](docs/DOCKER.md).
 
 ## Documentation
 
