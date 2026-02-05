@@ -1,0 +1,63 @@
+join:
+  post:
+    tags:
+      - Membership
+    summary: Request to join a swarm
+    description: |
+      Submit a join request to the swarm master using an invite token.
+      The master validates the token and adds the agent to the swarm.
+    operationId: joinSwarm
+    parameters:
+      - $ref: '../components/parameters.yaml#/AgentId'
+      - $ref: '../components/parameters.yaml#/ProtocolVersion'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas-requests.yaml#/JoinRequest'
+          example:
+            type: "system"
+            action: "join_request"
+            invite_token: "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9..."
+            sender:
+              agent_id: "agent-new-789"
+              endpoint: "https://newagent.example.com"
+              public_key: "base64-encoded-ed25519-public-key"
+    responses:
+      '200':
+        description: Join request accepted
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas-responses.yaml#/JoinAcceptedResponse'
+      '202':
+        description: Join request pending approval
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas-responses.yaml#/JoinPendingResponse'
+      '400':
+        description: Invalid request or token
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas-common.yaml#/Error'
+            example:
+              error:
+                code: "INVALID_TOKEN"
+                message: "Invite token has expired"
+                details:
+                  expired_at: "2026-02-04T12:00:00.000Z"
+      '429':
+        description: Rate limited
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas-common.yaml#/Error'
+      '500':
+        description: Server error
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas-common.yaml#/Error'

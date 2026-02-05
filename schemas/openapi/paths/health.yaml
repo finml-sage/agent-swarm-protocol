@@ -1,0 +1,39 @@
+health:
+  get:
+    tags:
+      - Discovery
+    summary: Health check
+    description: Check if the agent is operational and accepting messages.
+    operationId: healthCheck
+    parameters:
+      - $ref: '../components/parameters.yaml#/AgentId'
+      - $ref: '../components/parameters.yaml#/ProtocolVersion'
+    responses:
+      '200':
+        description: Agent status
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas-responses.yaml#/HealthResponse'
+            examples:
+              healthy:
+                summary: Healthy agent
+                value:
+                  status: "healthy"
+                  agent_id: "agent-receiver-456"
+                  protocol_version: "0.1.0"
+                  timestamp: "2026-02-05T14:30:00.000Z"
+              degraded:
+                summary: Degraded agent
+                value:
+                  status: "degraded"
+                  agent_id: "agent-receiver-456"
+                  protocol_version: "0.1.0"
+                  timestamp: "2026-02-05T14:30:00.000Z"
+                  message: "Message queue backlog exceeds threshold"
+      '500':
+        description: Server error
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas-common.yaml#/Error'

@@ -1,0 +1,18 @@
+RateLimitLimit:
+  description: Maximum requests allowed in the time window
+  schema:
+    type: integer
+    example: 60
+
+RateLimitRemaining:
+  description: Remaining requests in the current window
+  schema:
+    type: integer
+    example: 59
+
+RateLimitReset:
+  description: Unix timestamp when the rate limit resets
+  schema:
+    type: integer
+    format: int64
+    example: 1738765860

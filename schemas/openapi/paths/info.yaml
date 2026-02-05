@@ -1,0 +1,35 @@
+info:
+  get:
+    tags:
+      - Discovery
+    summary: Agent information
+    description: Get public information about an agent.
+    operationId: getAgentInfo
+    parameters:
+      - $ref: '../components/parameters.yaml#/AgentId'
+      - $ref: '../components/parameters.yaml#/ProtocolVersion'
+    responses:
+      '200':
+        description: Agent information
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas-responses.yaml#/AgentInfo'
+            example:
+              agent_id: "agent-receiver-456"
+              endpoint: "https://agent.example.com"
+              public_key: "base64-encoded-ed25519-public-key"
+              protocol_version: "0.1.0"
+              capabilities:
+                - "message"
+                - "system"
+                - "notification"
+              metadata:
+                name: "Research Assistant Agent"
+                description: "Handles research and documentation tasks"
+      '500':
+        description: Server error
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas-common.yaml#/Error'

@@ -1,0 +1,102 @@
+MessageResponse:
+  type: object
+  required: [status, message_id]
+  properties:
+    status:
+      type: string
+      enum: [received]
+    message_id:
+      type: string
+      format: uuid
+
+MessageQueuedResponse:
+  type: object
+  required: [status, message_id]
+  properties:
+    status:
+      type: string
+      enum: [queued]
+    message_id:
+      type: string
+      format: uuid
+
+JoinAcceptedResponse:
+  type: object
+  required: [status, swarm_id, members]
+  properties:
+    status:
+      type: string
+      enum: [accepted]
+    swarm_id:
+      type: string
+      format: uuid
+    swarm_name:
+      type: string
+      description: Human-readable swarm name
+    members:
+      type: array
+      items:
+        $ref: 'schemas-common.yaml#/Member'
+      description: List of current swarm members
+
+JoinPendingResponse:
+  type: object
+  required: [status, swarm_id]
+  properties:
+    status:
+      type: string
+      enum: [pending]
+    swarm_id:
+      type: string
+      format: uuid
+    message:
+      type: string
+      description: Explanation of pending status
+
+HealthResponse:
+  type: object
+  required: [status, agent_id, protocol_version, timestamp]
+  properties:
+    status:
+      type: string
+      enum: [healthy, degraded]
+    agent_id:
+      type: string
+      description: This agent's identifier
+    protocol_version:
+      type: string
+      pattern: '^\d+\.\d+\.\d+$'
+    timestamp:
+      type: string
+      format: date-time
+    message:
+      type: string
+      description: Optional status message
+
+AgentInfo:
+  type: object
+  required: [agent_id, endpoint, public_key, protocol_version]
+  properties:
+    agent_id:
+      type: string
+      description: This agent's identifier
+    endpoint:
+      type: string
+      format: uri
+      description: This agent's HTTPS endpoint
+    public_key:
+      type: string
+      description: Base64-encoded Ed25519 public key
+    protocol_version:
+      type: string
+      pattern: '^\d+\.\d+\.\d+$'
+    capabilities:
+      type: array
+      items:
+        type: string
+        enum: [message, system, notification]
+      description: Supported message types
+    metadata:
+      type: object
+      additionalProperties: true
+      description: Optional agent metadata
