@@ -1,0 +1,95 @@
+# Agent Swarm Protocol - Production Stack
+# Usage: docker compose up -d
+
+services:
+  handler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - AGENT_ID=${AGENT_ID}
+      - AGENT_ENDPOINT=https://${DOMAIN}/swarm
+      - AGENT_PUBLIC_KEY=${AGENT_PUBLIC_KEY}
+      - AGENT_NAME=${AGENT_NAME:-}
+      - AGENT_DESCRIPTION=${AGENT_DESCRIPTION:-}
+      - PRIVATE_KEY_PATH=/app/keys/private.pem
+      - DATABASE_PATH=/app/data/state.db
+      - RATE_LIMIT_MESSAGES_PER_MINUTE=${RATE_LIMIT_MESSAGES_PER_MINUTE:-60}
+      - RATE_LIMIT_JOIN_PER_HOUR=${RATE_LIMIT_JOIN_PER_HOUR:-10}
+    volumes:
+      - state_data:/app/data
+      - ${PRIVATE_KEY_PATH:-./keys/private.pem}:/app/keys/private.pem:ro
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import httpx; httpx.get('http://localhost:8080/swarm/health', timeout=5).raise_for_status()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+        reservations:
+          memory: 128M
+          cpus: '0.25'
+
+  angie:
+    image: docker.angie.software/angie:latest
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      - DOMAIN=${DOMAIN}
+      - UPSTREAM_HOST=handler
+      - UPSTREAM_PORT=8080
+    volumes:
+      - ./docker/angie/angie.conf:/etc/angie/angie.conf:ro
+      - ./docker/angie/conf.d:/etc/angie/conf.d:ro
+      - ./docker/angie/templates:/etc/angie/templates:ro
+      - acme_challenges:/var/www/acme
+      - certificates:/etc/letsencrypt
+      - angie_logs:/var/log/angie
+    networks:
+      - internal
+      - external
+    depends_on:
+      handler:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-k", "https://localhost/swarm/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 64M
+          cpus: '0.1'
+
+networks:
+  internal:
+    driver: bridge
+    internal: true
+  external:
+    driver: bridge
+
+volumes:
+  state_data:
+    driver: local
+  acme_challenges:
+    driver: local
+  certificates:
+    driver: local
+  angie_logs:
+    driver: local
