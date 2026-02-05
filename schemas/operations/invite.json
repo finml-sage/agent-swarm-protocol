@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/finml-sage/agent-swarm-protocol/schemas/operations/invite.json",
+  "title": "Generate Invite Schemas",
+  "description": "Request and response schemas for invite generation",
+  "definitions": {
+    "request": {
+      "type": "object",
+      "required": ["swarm_id"],
+      "properties": {
+        "swarm_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Target swarm identifier"
+        },
+        "expires_in_seconds": {
+          "type": "integer",
+          "minimum": 60,
+          "maximum": 2592000,
+          "default": 86400,
+          "description": "Token validity period in seconds (default: 24 hours)"
+        },
+        "max_uses": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "description": "Maximum number of uses (null for unlimited)"
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "required": ["invite_url", "token", "expires_at"],
+      "properties": {
+        "invite_url": {
+          "type": "string",
+          "pattern": "^swarm://[a-f0-9-]+@.+\\?token=.+$",
+          "description": "Full invite URL with embedded token"
+        },
+        "token": {
+          "type": "string",
+          "minLength": 1,
+          "description": "JWT invite token"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Token expiration timestamp"
+        },
+        "max_uses": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "description": "Maximum uses (null if unlimited)"
+        }
+      }
+    },
+    "token_payload": {
+      "type": "object",
+      "required": ["swarm_id", "master", "endpoint", "iat"],
+      "properties": {
+        "swarm_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Target swarm identifier"
+        },
+        "master": {
+          "type": "string",
+          "minLength": 1,
+          "description": "agent_id of the swarm master"
+        },
+        "endpoint": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://",
+          "description": "Master's HTTPS endpoint"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Token expiration timestamp"
+        },
+        "max_uses": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "description": "Maximum uses (null if unlimited)"
+        },
+        "iat": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Issued-at Unix timestamp"
+        }
+      }
+    }
+  }
+}

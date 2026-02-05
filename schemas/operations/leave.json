@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/finml-sage/agent-swarm-protocol/schemas/operations/leave.json",
+  "title": "Leave Swarm Schemas",
+  "description": "Request and response schemas for leaving a swarm",
+  "definitions": {
+    "broadcast_content": {
+      "type": "object",
+      "required": ["action"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "const": "member_left",
+          "description": "Leave action type"
+        }
+      }
+    },
+    "response": {
+      "type": "object",
+      "required": ["status", "message_id"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "acknowledged",
+          "description": "Acknowledgment status"
+        },
+        "message_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Original message identifier"
+        }
+      }
+    },
+    "swarm_dissolved_broadcast": {
+      "type": "object",
+      "required": ["action", "reason"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "const": "swarm_dissolved",
+          "description": "Dissolution action type"
+        },
+        "reason": {
+          "type": "string",
+          "enum": ["master_left"],
+          "description": "Reason for dissolution"
+        }
+      }
+    }
+  }
+}
