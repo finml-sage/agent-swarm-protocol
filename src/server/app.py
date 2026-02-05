@@ -1,8 +1,9 @@
 """FastAPI application factory."""
+from typing import Optional
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
-from src.server.config import ServerConfig
+from src.server.config import ServerConfig, load_config_from_env
 from src.server.errors import SwarmProtocolError, RateLimitedError
 from src.server.middleware.rate_limit import RateLimitMiddleware
 from src.server.middleware.logging import RequestLoggingMiddleware
@@ -14,8 +15,14 @@ from src.server.routes.health import create_health_router
 from src.server.routes.info import create_info_router
 
 
-def create_app(config: ServerConfig) -> FastAPI:
-    """Create and configure the FastAPI application."""
+def create_app(config: Optional[ServerConfig] = None) -> FastAPI:
+    """Create and configure the FastAPI application.
+
+    When called without arguments (e.g. via uvicorn --factory), loads
+    configuration from environment variables.
+    """
+    if config is None:
+        config = load_config_from_env()
     app = FastAPI(
         title="Agent Swarm Protocol",
         description="P2P communication server for autonomous agents",
