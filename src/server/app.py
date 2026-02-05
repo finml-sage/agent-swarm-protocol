@@ -1,12 +1,14 @@
 """FastAPI application factory."""
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncIterator, Optional
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from src.server.config import ServerConfig, load_config_from_env
 from src.server.errors import SwarmProtocolError, RateLimitedError
+from src.server.invoker import AgentInvoker
 from src.server.middleware.rate_limit import RateLimitMiddleware
 from src.server.middleware.logging import RequestLoggingMiddleware
 from src.server.models.responses import ErrorResponse, ErrorDetail
@@ -15,8 +17,10 @@ from src.server.routes.message import create_message_router
 from src.server.routes.join import create_join_router
 from src.server.routes.health import create_health_router
 from src.server.routes.info import create_info_router
+from src.server.routes.wake import create_wake_router
 from src.state.database import DatabaseManager
 from src.claude.notification_preferences import NotificationPreferences
+from src.claude.session_manager import SessionManager
 from src.claude.wake_trigger import WakeTrigger
 
 logger = logging.getLogger(__name__)
@@ -84,6 +88,30 @@ def create_app(config: Optional[ServerConfig] = None) -> FastAPI:
     app.include_router(create_join_router(config, db_manager))
     app.include_router(create_health_router(config, queue))
     app.include_router(create_info_router(config))
+
+    # Wire /api/wake endpoint when enabled
+    if config.wake_endpoint.enabled:
+        session_mgr = SessionManager(
+            session_file=Path(config.wake_endpoint.session_file),
+            session_timeout_minutes=config.wake_endpoint.session_timeout_minutes,
+        )
+        invoker = AgentInvoker(
+            method=config.wake_endpoint.invoke_method,
+            target=config.wake_endpoint.invoke_target,
+        )
+        app.include_router(
+            create_wake_router(
+                session_manager=session_mgr,
+                invoker=invoker,
+                wake_secret=config.wake_endpoint.secret,
+            )
+        )
+        logger.info(
+            "Wake endpoint active, method=%s", config.wake_endpoint.invoke_method,
+        )
+    else:
+        logger.info("Wake endpoint disabled")
+
     return app
 
 
