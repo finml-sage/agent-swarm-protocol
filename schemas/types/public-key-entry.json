@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/finml-sage/agent-swarm-protocol/schemas/types/public-key-entry.json",
+  "title": "Public Key Entry",
+  "description": "A cached public key for an agent used in signature verification",
+  "type": "object",
+  "required": ["public_key", "fetched_at"],
+  "properties": {
+    "public_key": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9+/=]{43,44}$",
+      "description": "Base64-encoded Ed25519 public key"
+    },
+    "fetched_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp when this key was fetched or verified"
+    },
+    "endpoint": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://",
+      "description": "Endpoint where this key was retrieved from"
+    }
+  }
+}

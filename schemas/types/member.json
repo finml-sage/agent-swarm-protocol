@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/finml-sage/agent-swarm-protocol/schemas/types/member.json",
+  "title": "Swarm Member",
+  "description": "A member of a swarm with identity, endpoint, and cryptographic key",
+  "type": "object",
+  "required": ["agent_id", "endpoint", "public_key", "joined_at"],
+  "properties": {
+    "agent_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unique identifier for this agent"
+    },
+    "endpoint": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://",
+      "description": "HTTPS endpoint for receiving messages"
+    },
+    "public_key": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9+/=]{43,44}$",
+      "description": "Base64-encoded Ed25519 public key (32 bytes, 43-44 chars base64)"
+    },
+    "joined_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp when this member joined the swarm"
+    }
+  }
+}

@@ -408,28 +408,177 @@ Agent B reviews issue on GitHub
 
 ## 9. State Management
 
-### 9.1 Membership State
+### 9.1 State File Location
 
-Each agent maintains:
+Each agent stores membership state locally:
+
+| Platform | Default Path |
+|----------|--------------|
+| Linux/macOS | `~/.swarm/state.json` |
+| Windows | `%APPDATA%\swarm\state.json` |
+
+The state file MUST:
+- Be valid JSON conforming to `schemas/membership-state.json`
+- Use UTF-8 encoding
+- Have restricted permissions (owner read/write only: `chmod 600`)
+
+### 9.2 Membership State Schema
+
+Each agent maintains a state file with the following structure:
+
 ```json
 {
-  "swarms": {
-    "swarm_id": {
-      "name": "string",
-      "master": "agent_id",
-      "members": [...],
-      "joined_at": "ISO-8601",
-      "muted": false
-    }
-  },
-  "muted_agents": ["agent_id"],
+  "schema_version": "1.0.0",
+  "agent_id": "my-agent-id",
+  "swarms": {},
+  "muted_swarms": [],
+  "muted_agents": [],
+  "public_keys": {}
+}
+```
+
+#### 9.2.1 Swarm Membership Object
+
+Each entry in `swarms` is keyed by `swarm_id` and contains:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `swarm_id` | string (UUID) | Yes | Unique identifier for the swarm |
+| `name` | string | Yes | Human-readable swarm name (1-256 chars) |
+| `master` | string | Yes | Agent ID of the swarm creator/admin |
+| `members` | array | Yes | List of Member objects |
+| `joined_at` | string (ISO-8601) | Yes | When this agent joined |
+| `settings` | object | Yes | Swarm configuration |
+
+**Settings Object:**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `allow_member_invite` | boolean | false | Allow non-master to invite |
+| `require_approval` | boolean | false | Master must approve joins |
+
+#### 9.2.2 Member Object
+
+Each member in a swarm:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `agent_id` | string | Yes | Unique agent identifier |
+| `endpoint` | string (HTTPS URI) | Yes | Agent's message endpoint |
+| `public_key` | string (base64) | Yes | Ed25519 public key (32 bytes) |
+| `joined_at` | string (ISO-8601) | Yes | When this member joined |
+
+**Example:**
+
+```json
+{
+  "agent_id": "code-agent-alpha",
+  "endpoint": "https://alpha.agents.example.com/swarm",
+  "public_key": "MCowBQYDK2VwAyEAq9xoSdPX...",
+  "joined_at": "2026-02-05T14:30:00.000Z"
+}
+```
+
+### 9.3 Mute Lists
+
+Agents can mute swarms or individual agents to silently drop their messages.
+
+#### 9.3.1 Muted Swarms
+
+```json
+{
+  "muted_swarms": [
+    "550e8400-e29b-41d4-a716-446655440000",
+    "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+  ]
+}
+```
+
+Messages from muted swarms are:
+- Accepted with HTTP 200 (to avoid sender retry)
+- Silently discarded (not queued for processing)
+- Not logged to message history
+
+#### 9.3.2 Muted Agents
+
+```json
+{
+  "muted_agents": [
+    "spam-bot-123",
+    "untrusted-agent"
+  ]
+}
+```
+
+Messages from muted agents are handled identically to muted swarms.
+
+### 9.4 Public Key Registry
+
+The `public_keys` object caches known agent public keys for signature verification:
+
+```json
+{
   "public_keys": {
-    "agent_id": "base64-public-key"
+    "code-agent-alpha": {
+      "public_key": "MCowBQYDK2VwAyEAq9xoSdPX...",
+      "fetched_at": "2026-02-05T10:00:00.000Z",
+      "endpoint": "https://alpha.agents.example.com/swarm/info"
+    },
+    "code-agent-beta": {
+      "public_key": "MCowBQYDK2VwAyEAr8ypTePY...",
+      "fetched_at": "2026-02-05T12:00:00.000Z",
+      "endpoint": "https://beta.agents.example.com/swarm/info"
+    }
   }
 }
 ```
 
-### 9.2 Message Queue
+**Key Fetching:**
+
+When a message arrives from an unknown agent:
+1. Fetch public key from `GET {sender.endpoint}/info`
+2. Verify key matches the signing key
+3. Cache in `public_keys` with `fetched_at` timestamp
+4. Verify message signature
+
+**Key Refresh:**
+
+Keys SHOULD be refreshed when:
+- Signature verification fails (key may have rotated)
+- `fetched_at` exceeds configurable TTL (recommend 24 hours)
+
+### 9.5 State Portability
+
+State files are designed for export/import to support:
+- Agent migration between hosts
+- Backup and restore
+- Multi-instance agent deployments
+
+**Export:**
+
+When exporting, add `exported_at` timestamp:
+
+```json
+{
+  "schema_version": "1.0.0",
+  "agent_id": "my-agent",
+  "exported_at": "2026-02-05T15:00:00.000Z",
+  "swarms": { },
+  "muted_swarms": [],
+  "muted_agents": [],
+  "public_keys": { }
+}
+```
+
+**Import:**
+
+When importing:
+1. Validate against `schemas/membership-state.json`
+2. Verify `schema_version` compatibility
+3. Merge or replace based on agent configuration
+4. Remove `exported_at` field after import
+
+### 9.6 Message Queue
 
 Incoming messages are queued for processing:
 ```sql

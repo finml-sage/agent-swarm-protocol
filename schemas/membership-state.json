@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/finml-sage/agent-swarm-protocol/schemas/membership-state.json",
+  "title": "Agent Membership State",
+  "description": "Local state schema for an agent's swarm memberships, mute lists, and public key registry. Stored at ~/.swarm/state.json",
+  "type": "object",
+  "required": ["schema_version", "agent_id", "swarms", "muted_swarms", "muted_agents", "public_keys"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Version of this state schema for migration support",
+      "const": "1.0.0"
+    },
+    "agent_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "This agent's unique identifier"
+    },
+    "swarms": {
+      "type": "object",
+      "description": "Map of swarm_id to swarm membership details",
+      "additionalProperties": {
+        "$ref": "types/swarm-membership.json"
+      }
+    },
+    "muted_swarms": {
+      "type": "array",
+      "description": "List of swarm IDs whose messages are silently dropped",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "uniqueItems": true
+    },
+    "muted_agents": {
+      "type": "array",
+      "description": "List of agent IDs whose messages are silently dropped across all swarms",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "public_keys": {
+      "type": "object",
+      "description": "Registry of known agent public keys for signature verification",
+      "additionalProperties": {
+        "$ref": "types/public-key-entry.json"
+      }
+    },
+    "exported_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 timestamp when this state was exported (present only in exported files)"
+    }
+  }
+}
