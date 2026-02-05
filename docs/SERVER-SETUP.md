@@ -127,7 +127,7 @@ sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/reload-angie.sh
 
 ```bash
 cd /path/to/agent-swarm-protocol
-python -m uvicorn src.server.main:app --host 127.0.0.1 --port 8080
+python -m uvicorn src.server.app:create_app --factory --host 127.0.0.1 --port 8080
 ```
 
 Or with systemd:
@@ -142,7 +142,7 @@ After=network.target
 Type=simple
 User=www-data
 WorkingDirectory=/opt/agent-swarm-protocol
-ExecStart=/usr/bin/python3 -m uvicorn src.server.main:app --host 127.0.0.1 --port 8080
+ExecStart=/usr/bin/python3 -m uvicorn src.server.app:create_app --factory --host 127.0.0.1 --port 8080
 Restart=always
 RestartSec=5
 
