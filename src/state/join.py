@@ -53,7 +53,7 @@ async def validate_and_join(
     This is the primary entry point for the join flow. It performs:
     1. Token signature and expiry validation
     2. Swarm existence lookup
-    3. Duplicate membership check
+    3. Duplicate membership check (idempotent: returns current data if already member)
     4. Approval-required check
     5. Member registration
 
@@ -71,7 +71,6 @@ async def validate_and_join(
     Raises:
         TokenError: If the invite token is invalid, expired, or forged.
         SwarmNotFoundError: If the swarm does not exist.
-        AlreadyMemberError: If the agent is already in the swarm.
         ApprovalRequiredError: If the swarm requires approval.
     """
     claims = verify_invite_token(invite_token, master_public_key)
@@ -84,9 +83,10 @@ async def validate_and_join(
         )
 
     if _is_member(swarm, agent_id):
-        raise AlreadyMemberError(
-            f"Agent '{agent_id}' is already a member of swarm "
-            f"'{claims.swarm_id}'"
+        return JoinResult(
+            swarm_id=swarm.swarm_id,
+            swarm_name=swarm.name,
+            members=swarm.members,
         )
 
     if swarm.settings.require_approval:

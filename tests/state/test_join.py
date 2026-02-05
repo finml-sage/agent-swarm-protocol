@@ -265,20 +265,53 @@ class TestValidateAndJoin:
                 )
 
     @pytest.mark.asyncio
-    async def test_join_already_member(
+    async def test_idempotent_join_returns_membership(
         self, seeded_db, ed25519_keypair, valid_jwt
     ):
+        """Already-member agent gets JoinResult instead of AlreadyMemberError."""
         _, pub_bytes = ed25519_keypair
         async with seeded_db.connection() as conn:
-            with pytest.raises(AlreadyMemberError, match="already a member"):
-                await validate_and_join(
-                    conn=conn,
-                    invite_token=valid_jwt,
-                    master_public_key=pub_bytes,
-                    agent_id="master-agent",
-                    agent_endpoint="https://master.example.com/swarm",
-                    agent_public_key="bWFzdGVyLXB1YmxpYy1rZXk=",
-                )
+            result = await validate_and_join(
+                conn=conn,
+                invite_token=valid_jwt,
+                master_public_key=pub_bytes,
+                agent_id="master-agent",
+                agent_endpoint="https://master.example.com/swarm",
+                agent_public_key="bWFzdGVyLXB1YmxpYy1rZXk=",
+            )
+        assert isinstance(result, JoinResult)
+        assert result.swarm_id == "550e8400-e29b-41d4-a716-446655440000"
+        assert result.swarm_name == "Test Swarm"
+        assert any(m.agent_id == "master-agent" for m in result.members)
+
+    @pytest.mark.asyncio
+    async def test_idempotent_join_twice_same_result(
+        self, seeded_db, ed25519_keypair, valid_jwt
+    ):
+        """Joining twice returns the same membership data both times."""
+        _, pub_bytes = ed25519_keypair
+        async with seeded_db.connection() as conn:
+            first = await validate_and_join(
+                conn=conn,
+                invite_token=valid_jwt,
+                master_public_key=pub_bytes,
+                agent_id="new-agent",
+                agent_endpoint="https://new-agent.example.com/swarm",
+                agent_public_key="bmV3LWFnZW50LWtleQ==",
+            )
+            second = await validate_and_join(
+                conn=conn,
+                invite_token=valid_jwt,
+                master_public_key=pub_bytes,
+                agent_id="new-agent",
+                agent_endpoint="https://new-agent.example.com/swarm",
+                agent_public_key="bmV3LWFnZW50LWtleQ==",
+            )
+        assert first.swarm_id == second.swarm_id
+        assert first.swarm_name == second.swarm_name
+        first_ids = {m.agent_id for m in first.members}
+        second_ids = {m.agent_id for m in second.members}
+        assert first_ids == second_ids
 
     @pytest.mark.asyncio
     async def test_join_requires_approval(
