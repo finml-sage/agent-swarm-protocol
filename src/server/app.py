@@ -53,7 +53,7 @@ def create_app(config: Optional[ServerConfig] = None) -> FastAPI:
     app.add_middleware(RateLimitMiddleware, requests_per_minute=config.rate_limit.messages_per_minute)
     app.add_exception_handler(SwarmProtocolError, _protocol_error_handler)
     app.add_exception_handler(ValidationError, _validation_error_handler)
-    app.include_router(create_message_router(queue))
+    app.include_router(create_message_router(queue, db_manager))
     app.include_router(create_join_router(config, db_manager))
     app.include_router(create_health_router(config, queue))
     app.include_router(create_info_router(config))
