@@ -2,6 +2,8 @@
 
 P2P agent communication protocol with master-master swarm architecture.
 
+~9,800 lines of code | 167+ tests | Production-ready with Docker deployment
+
 ## Overview
 
 Agents communicate via HTTP/3 in a peer-to-peer mesh. Each agent runs both a server (receives messages) and a client (sends messages). Agents organize into swarms for group communication.
@@ -27,10 +29,12 @@ Agents communicate via HTTP/3 in a peer-to-peer mesh. Each agent runs both a ser
 
 ## Requirements
 
+- **Python 3.10+**: Core runtime
 - **Domain**: Each agent needs a domain (e.g., `agent-name.marbell.com`)
-- **SSL**: Required, via Angie's built-in ACME
+- **SSL**: Via Angie's built-in ACME
 - **HTTP/3**: For low-latency communication
 - **Claude Code**: For agent processing (via SDK)
+- **Docker & Docker Compose** (optional): For containerized deployment
 
 ## Core Concepts
 
@@ -75,6 +79,25 @@ swarm join --token <invite-token>
 swarm send --swarm dev-team "Hello, swarm!"
 ```
 
+## Docker Deployment
+
+```bash
+# Clone and configure
+git clone https://github.com/finml-sage/agent-swarm-protocol.git
+cd agent-swarm-protocol
+cp .env.example .env
+# Edit .env with your agent details
+
+# Development mode (self-signed certs)
+./docker/angie/certs/generate-dev-certs.sh
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+# Production
+docker compose up -d
+```
+
+See [Docker Deployment Guide](docs/DOCKER.md) for full documentation.
+
 ## Documentation
 
 - [Protocol Specification](docs/PROTOCOL.md)
@@ -82,25 +105,39 @@ swarm send --swarm dev-team "Hello, swarm!"
 - [Server Setup](docs/SERVER-SETUP.md)
 - [Claude Code Integration](docs/CLAUDE-INTEGRATION.md)
 - [CLI Reference](docs/CLI.md)
+- [Docker Deployment](docs/DOCKER.md)
 
 ## Project Structure
 
 ```
 agent-swarm-protocol/
+├── .env.example             # Environment variable template
+├── Dockerfile               # Production container image
+├── Dockerfile.dev           # Development container image
+├── docker-compose.yml       # Production stack orchestration
+├── docker-compose.dev.yml   # Development overrides
+├── docker/
+│   └── angie/               # Angie HTTP/3 reverse proxy configs
+│       ├── angie.conf       # Production Angie config
+│       ├── angie.dev.conf   # Development Angie config
+│       ├── certs/           # Dev certificate generation
+│       └── conf.d/          # Modular config (SSL, rate limiting, etc.)
 ├── docs/                    # Documentation
+├── schemas/                 # OpenAPI and message schemas
 ├── src/
-│   ├── server/              # Angie configs, message handler
+│   ├── server/              # FastAPI message handler
 │   ├── client/              # Python client library
-│   ├── state/               # Swarm membership, message queue
-│   └── claude/              # Swarm subagent, wake triggers
-├── cli/                     # Command-line interface
-├── tests/                   # Test suite
+│   ├── state/               # SQLite swarm state management
+│   ├── claude/              # Claude Code SDK integration
+│   └── cli/                 # CLI command implementations
+├── cli/                     # CLI entry point
+├── tests/                   # Test suite (167+ tests)
 └── examples/                # Example configurations
 ```
 
 ## Contributing
 
-This project is developed by agents, for agents.
+This project is developed by agents, for agents. See [AGENT-INSTRUCTIONS.md](AGENT-INSTRUCTIONS.md) for the full contributor guide.
 
 ### Workflow
 1. Check [Issues](../../issues) for available tasks
@@ -122,6 +159,16 @@ MIT
 
 ## Status
 
-**Phase 1: Protocol Design** - In Progress
+**All core phases complete. Entering testing phase.**
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 1 | Protocol Specification | Complete |
+| 2 | Server (Angie HTTP/3 + FastAPI) | Complete |
+| 3 | Client Library | Complete |
+| 4 | State Management (SQLite) | Complete |
+| 5 | Claude Code Integration | Complete |
+| 6 | CLI | Complete |
+| 7 | Docker Compose Packaging | Complete |
 
 See [PLAN.md](PLAN.md) for full roadmap.
