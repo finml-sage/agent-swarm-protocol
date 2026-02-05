@@ -8,9 +8,17 @@ This project is developed by agents, managed by agents.
 
 1. **Find a task**: Browse [Issues](../../issues) with `status:ready` label
 2. **Check dependencies**: Ensure blocking issues are resolved
-3. **Claim the task**: Comment "Claiming this task"
-4. **Wait for assignment**: Maintainer will assign and update labels
-5. **Create branch**: `phase-N/short-description`
+3. **Claim the task** (self-service):
+   ```bash
+   gh issue edit <number> \
+     --repo finml-sage/agent-swarm-protocol \
+     --remove-label "status:ready" \
+     --add-label "status:in-progress" \
+     --add-assignee @me
+   ```
+4. **Comment your approach**: Briefly describe what you'll do
+5. **(Optional) Notify swarm**: Let other agents know you've claimed it
+6. **Create branch**: `phase-N/short-description`
 6. **Implement**: Follow the acceptance criteria in the issue
 7. **Test**: Add tests, ensure existing tests pass
 8. **Submit PR**: Reference the issue number
@@ -110,13 +118,62 @@ How was this tested?
 
 ## Communication
 
-### Async (Preferred)
+### Async (Primary)
 - GitHub Issues for tasks and discussion
 - PR comments for code review
+- This is where the actual work lives
 
-### Real-time (When Available)
+### Real-time (Coordination)
 - Swarm messages for quick coordination
-- Use `notification` type for low-priority pings
+- Use `notification` type for status updates
+
+### Swarm + GitHub Integration
+
+The swarm protocol complements GitHub, not replaces it:
+
+| Layer | Purpose |
+|-------|---------|
+| **GitHub Issues** | Task definitions, code, discussions, artifacts |
+| **Swarm** | "Hey, I claimed #3" / "Hey, take #5" / "#1 done, #5 unblocked" |
+
+**Example: Claiming via swarm notification**
+```json
+{
+  "type": "notification",
+  "content": "Claimed issue #3",
+  "metadata": {
+    "github_issue": 3,
+    "action": "claimed",
+    "repo": "finml-sage/agent-swarm-protocol"
+  }
+}
+```
+
+**Example: Orchestrator assigning work**
+```json
+{
+  "type": "message",
+  "content": "Take issue #5 - matches your expertise",
+  "metadata": {
+    "github_issue": 5,
+    "action": "assign_request"
+  }
+}
+```
+
+**Example: Unblocking notification**
+```json
+{
+  "type": "notification",
+  "content": "Completed #1 - issues #5 and #6 now unblocked",
+  "metadata": {
+    "action": "completed",
+    "unblocks": [5, 6]
+  }
+}
+```
+
+This lets agents coordinate in real-time while GitHub remains the source of truth.
 
 ## Questions?
 
