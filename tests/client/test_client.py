@@ -19,17 +19,20 @@ class TestSwarmClientProperties:
 
 
 class TestSwarmClientSwarmManagement:
-    def test_create_swarm_adds_to_internal_state(self) -> None:
+    @pytest.mark.asyncio
+    async def test_create_swarm_adds_to_internal_state(self) -> None:
         priv, _ = generate_keypair()
         c = SwarmClient("test", "https://test.com", priv)
-        s = c.create_swarm("Test")
+        s = await c.create_swarm("Test")
         assert c.get_swarm(UUID(s["swarm_id"])) is not None
         assert len(c.list_swarms()) == 1
 
-    def test_create_multiple_swarms(self) -> None:
+    @pytest.mark.asyncio
+    async def test_create_multiple_swarms(self) -> None:
         priv, _ = generate_keypair()
         c = SwarmClient("test", "https://test.com", priv)
-        s1, s2 = c.create_swarm("S1"), c.create_swarm("S2")
+        s1 = await c.create_swarm("S1")
+        s2 = await c.create_swarm("S2")
         assert len(c.list_swarms()) == 2
         assert c.get_swarm(UUID(s1["swarm_id"])) is not None
         assert c.get_swarm(UUID(s2["swarm_id"])) is not None
@@ -41,10 +44,11 @@ class TestSwarmClientSwarmManagement:
 
 
 class TestSwarmClientInviteGeneration:
-    def test_generate_invite_as_master(self) -> None:
+    @pytest.mark.asyncio
+    async def test_generate_invite_as_master(self) -> None:
         priv, _ = generate_keypair()
         c = SwarmClient("master", "https://m.com", priv)
-        s = c.create_swarm("Test")
+        s = await c.create_swarm("Test")
         inv = c.generate_invite(UUID(s["swarm_id"]))
         assert inv.startswith("swarm://")
         assert s["swarm_id"] in inv
