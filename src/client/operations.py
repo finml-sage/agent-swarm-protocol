@@ -25,7 +25,7 @@ async def join_swarm(transport: Transport, token_url: str, agent_id: str, endpoi
     pk_b64 = public_key_to_base64(pk.public_key())
     body = {"type": "system", "action": "join_request", "invite_token": token_url.split("?token=")[1],
             "sender": {"agent_id": agent_id, "endpoint": endpoint, "public_key": pk_b64}}
-    status, resp = await transport.post(f"{tok['endpoint'].rstrip('/')}/swarm/join", body)
+    status, resp = await transport.post(f"{tok['endpoint'].rstrip('/')}/join", body)
     if status == 202:
         raise SwarmError("Join pending approval")
     if status == 400:
@@ -49,7 +49,7 @@ async def leave_swarm(transport: Transport, swarm: SwarmMembership, agent_id: st
     for m in swarm["members"]:
         if m["agent_id"] != agent_id:
             try:
-                await transport.post(f"{m['endpoint'].rstrip('/')}/swarm/message", msg, retry=False)
+                await transport.post(f"{m['endpoint'].rstrip('/')}/message", msg, retry=False)
             except TransportError:
                 pass
 
@@ -63,14 +63,14 @@ async def kick_member(transport: Transport, swarm: SwarmMembership, master_id: s
     now, sid = datetime.now(timezone.utc), UUID(swarm["swarm_id"])
     kick_c = f'{{"action":"kicked","agent_id":"{target}"' + (f',"reason":"{reason}"}}' if reason else "}")
     mid1 = uuid4()
-    await transport.post(f"{t['endpoint'].rstrip('/')}/swarm/message", _sys_msg(mid1, now, master_id, master_ep, target, sid, kick_c, sign_message(pk, mid1, now, sid, target, "system", kick_c)))
+    await transport.post(f"{t['endpoint'].rstrip('/')}/message", _sys_msg(mid1, now, master_id, master_ep, target, sid, kick_c, sign_message(pk, mid1, now, sid, target, "system", kick_c)))
     bc_c = f'{{"action":"member_kicked","agent_id":"{target}"' + (f',"reason":"{reason}"}}' if reason else "}")
     mid2 = uuid4()
     bc_msg = _sys_msg(mid2, now, master_id, master_ep, "broadcast", sid, bc_c, sign_message(pk, mid2, now, sid, "broadcast", "system", bc_c))
     for m in swarm["members"]:
         if m["agent_id"] not in (master_id, target):
             try:
-                await transport.post(f"{m['endpoint'].rstrip('/')}/swarm/message", bc_msg, retry=False)
+                await transport.post(f"{m['endpoint'].rstrip('/')}/message", bc_msg, retry=False)
             except TransportError:
                 pass
 
