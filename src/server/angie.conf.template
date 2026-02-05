@@ -1,0 +1,123 @@
+# Angie HTTP/3 Configuration for Agent Swarm Protocol
+# Template variables:
+#   {{DOMAIN}}        - Your agent's domain (e.g., agent.example.com)
+#   {{UPSTREAM_PORT}} - FastAPI application port (default: 8000)
+#
+# Required includes (copy to /etc/angie/conf.d/):
+#   - ssl.conf         (TLS/QUIC settings)
+#   - security.conf    (security headers)
+#   - proxy_params.conf (proxy settings)
+
+worker_processes auto;
+error_log /var/log/angie/error.log warn;
+pid /run/angie.pid;
+
+events {
+    worker_connections 1024;
+    use epoll;
+    multi_accept on;
+}
+
+http {
+    include /etc/angie/mime.types;
+    default_type application/octet-stream;
+
+    log_format main '$remote_addr - $remote_user [$time_local] "$request" '
+                    '$status $body_bytes_sent "$http_referer" '
+                    '"$http_user_agent" "$http_x_agent_id" '
+                    'rt=$request_time uct=$upstream_connect_time '
+                    'uht=$upstream_header_time urt=$upstream_response_time';
+
+    access_log /var/log/angie/access.log main;
+
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 65;
+    types_hash_max_size 2048;
+
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_types application/json;
+
+    # Rate limiting zones
+    limit_req_zone $http_x_agent_id zone=message_rate:10m rate=60r/m;
+    limit_req_zone $binary_remote_addr zone=join_rate:10m rate=10r/h;
+    limit_req_zone $http_x_agent_id zone=swarm_rate:10m rate=100r/m;
+    limit_conn_zone $binary_remote_addr zone=addr:10m;
+
+    upstream swarm_backend {
+        server 127.0.0.1:{{UPSTREAM_PORT}};
+        keepalive 32;
+    }
+
+    # HTTP to HTTPS redirect with ACME support
+    server {
+        listen 80;
+        listen [::]:80;
+        server_name {{DOMAIN}};
+
+        location /.well-known/acme-challenge/ {
+            root /var/www/acme;
+        }
+
+        location / {
+            return 301 https://$host$request_uri;
+        }
+    }
+
+    # Main HTTPS server with HTTP/3
+    server {
+        listen 443 ssl;
+        listen [::]:443 ssl;
+        listen 443 quic reuseport;
+        listen [::]:443 quic reuseport;
+
+        http2 on;
+        http3 on;
+
+        server_name {{DOMAIN}};
+
+        include /etc/angie/conf.d/ssl.conf;
+        include /etc/angie/conf.d/security.conf;
+
+        ssl_certificate /etc/letsencrypt/live/{{DOMAIN}}/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/{{DOMAIN}}/privkey.pem;
+        ssl_trusted_certificate /etc/letsencrypt/live/{{DOMAIN}}/chain.pem;
+
+        limit_conn addr 10;
+
+        location = /swarm/message {
+            limit_req zone=message_rate burst=10 nodelay;
+            limit_req zone=swarm_rate burst=20 nodelay;
+            limit_req_status 429;
+            proxy_pass http://swarm_backend;
+            include /etc/angie/conf.d/proxy_params.conf;
+        }
+
+        location = /swarm/join {
+            limit_req zone=join_rate burst=2 nodelay;
+            limit_req_status 429;
+            proxy_pass http://swarm_backend;
+            include /etc/angie/conf.d/proxy_params.conf;
+        }
+
+        location = /swarm/health {
+            proxy_pass http://swarm_backend;
+            include /etc/angie/conf.d/proxy_params.conf;
+        }
+
+        location = /swarm/info {
+            limit_req zone=swarm_rate burst=5 nodelay;
+            limit_req_status 429;
+            proxy_pass http://swarm_backend;
+            include /etc/angie/conf.d/proxy_params.conf;
+        }
+
+        location / {
+            return 404;
+        }
+    }
+}
