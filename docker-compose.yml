@@ -1,5 +1,11 @@
 # Agent Swarm Protocol - Production Stack
 # Usage: docker compose up -d
+#
+# NOTE: For production deployments, consider binding ports to a specific IP
+# instead of all interfaces. Example:
+#   - "203.0.113.1:80:80"
+#   - "203.0.113.1:443:443"
+#   - "203.0.113.1:443:443/udp"
 
 services:
   handler:
@@ -14,7 +20,7 @@ services:
       - AGENT_NAME=${AGENT_NAME:-}
       - AGENT_DESCRIPTION=${AGENT_DESCRIPTION:-}
       - PRIVATE_KEY_PATH=/app/keys/private.pem
-      - DATABASE_PATH=/app/data/state.db
+      - DB_PATH=/app/data/swarm.db
       - RATE_LIMIT_MESSAGES_PER_MINUTE=${RATE_LIMIT_MESSAGES_PER_MINUTE:-60}
       - RATE_LIMIT_JOIN_PER_HOUR=${RATE_LIMIT_JOIN_PER_HOUR:-10}
     volumes:
@@ -52,8 +58,8 @@ services:
     volumes:
       - ./docker/angie/conf.d:/etc/angie/conf.d:ro
       - ./docker/angie/templates:/etc/angie/templates:ro
-      - acme_challenges:/var/www/acme
-      - certificates:/etc/letsencrypt
+      - /var/www/acme:/var/www/acme
+      - /etc/letsencrypt:/etc/letsencrypt:ro
       - angie_logs:/var/log/angie
     networks:
       - internal
@@ -85,10 +91,6 @@ networks:
 
 volumes:
   state_data:
-    driver: local
-  acme_challenges:
-    driver: local
-  certificates:
     driver: local
   angie_logs:
     driver: local
