@@ -1,0 +1,72 @@
+Sender:
+  type: object
+  required: [agent_id, endpoint]
+  properties:
+    agent_id:
+      type: string
+      minLength: 1
+      description: Unique identifier of the sending agent
+    endpoint:
+      type: string
+      format: uri
+      pattern: '^https://'
+      description: HTTPS endpoint of the sending agent
+
+JoinSender:
+  type: object
+  required: [agent_id, endpoint, public_key]
+  properties:
+    agent_id:
+      type: string
+      minLength: 1
+      description: Unique identifier of the joining agent
+    endpoint:
+      type: string
+      format: uri
+      pattern: '^https://'
+      description: HTTPS endpoint of the joining agent
+    public_key:
+      type: string
+      description: Base64-encoded Ed25519 public key
+
+Member:
+  type: object
+  required: [agent_id, endpoint, public_key]
+  properties:
+    agent_id:
+      type: string
+      description: Member's agent identifier
+    endpoint:
+      type: string
+      format: uri
+      description: Member's HTTPS endpoint
+    public_key:
+      type: string
+      description: Base64-encoded Ed25519 public key
+
+Error:
+  type: object
+  required: [error]
+  properties:
+    error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum:
+            - INVALID_FORMAT
+            - INVALID_SIGNATURE
+            - NOT_AUTHORIZED
+            - SWARM_NOT_FOUND
+            - INVALID_TOKEN
+            - RATE_LIMITED
+            - INTERNAL_ERROR
+          description: Machine-readable error code
+        message:
+          type: string
+          description: Human-readable error description
+        details:
+          type: object
+          additionalProperties: true
+          description: Additional error context

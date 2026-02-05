@@ -1,0 +1,44 @@
+openapi: 3.0.3
+info:
+  title: Agent Swarm Protocol API
+  description: |
+    REST API specification for the Agent Swarm Protocol (A2A).
+    This protocol enables peer-to-peer communication between autonomous agents.
+  version: 0.1.0
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://{agent-domain}
+    description: Agent endpoint
+    variables:
+      agent-domain:
+        default: agent.example.com
+        description: The agent's domain
+
+tags:
+  - name: Messaging
+    description: Message delivery endpoints
+  - name: Membership
+    description: Swarm membership operations
+  - name: Discovery
+    description: Agent information and health
+
+paths:
+  /swarm/message:
+    $ref: 'paths/message.yaml#/message'
+  /swarm/join:
+    $ref: 'paths/join.yaml#/join'
+  /swarm/health:
+    $ref: 'paths/health.yaml#/health'
+  /swarm/info:
+    $ref: 'paths/info.yaml#/info'
+
+components:
+  parameters:
+    $ref: 'components/parameters.yaml'
+  headers:
+    $ref: 'components/headers.yaml'
+  schemas:
+    $ref: 'components/schemas.yaml'

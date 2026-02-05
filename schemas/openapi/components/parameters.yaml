@@ -1,0 +1,19 @@
+AgentId:
+  name: X-Agent-ID
+  in: header
+  required: true
+  description: The sender's agent identifier
+  schema:
+    type: string
+    minLength: 1
+    example: "agent-sender-123"
+
+ProtocolVersion:
+  name: X-Swarm-Protocol
+  in: header
+  required: true
+  description: Protocol version for compatibility checking
+  schema:
+    type: string
+    pattern: '^\d+\.\d+\.\d+$'
+    example: "0.1.0"

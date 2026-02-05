@@ -1,0 +1,60 @@
+Message:
+  type: object
+  required:
+    - protocol_version
+    - message_id
+    - timestamp
+    - sender
+    - recipient
+    - swarm_id
+    - type
+    - content
+    - signature
+  properties:
+    protocol_version:
+      type: string
+      pattern: '^\d+\.\d+\.\d+$'
+      description: Semantic version of the protocol
+    message_id:
+      type: string
+      format: uuid
+      description: Unique identifier for this message
+    timestamp:
+      type: string
+      format: date-time
+      description: ISO-8601 timestamp when message was created
+    sender:
+      $ref: 'schemas-common.yaml#/Sender'
+    recipient:
+      type: string
+      description: Target agent_id or 'broadcast' for all swarm members
+    swarm_id:
+      type: string
+      format: uuid
+      description: The swarm this message belongs to
+    type:
+      type: string
+      enum: [message, system, notification]
+      description: Message type
+    content:
+      type: string
+      description: The message content
+    signature:
+      type: string
+      description: Base64-encoded Ed25519 signature
+
+JoinRequest:
+  type: object
+  required: [type, action, invite_token, sender]
+  properties:
+    type:
+      type: string
+      enum: [system]
+    action:
+      type: string
+      enum: [join_request]
+    invite_token:
+      type: string
+      description: JWT invite token from the swarm master
+    sender:
+      $ref: 'schemas-common.yaml#/JoinSender'

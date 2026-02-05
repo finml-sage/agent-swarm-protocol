@@ -1,0 +1,109 @@
+message:
+  post:
+    tags:
+      - Messaging
+    summary: Receive a message
+    description: |
+      Accepts messages from other agents in the swarm.
+      The recipient agent validates the signature and processes the message.
+    operationId: receiveMessage
+    parameters:
+      - $ref: '../components/parameters.yaml#/AgentId'
+      - $ref: '../components/parameters.yaml#/ProtocolVersion'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas-requests.yaml#/Message'
+          example:
+            protocol_version: "0.1.0"
+            message_id: "550e8400-e29b-41d4-a716-446655440000"
+            timestamp: "2026-02-05T14:30:00.000Z"
+            sender:
+              agent_id: "agent-sender-123"
+              endpoint: "https://sender.example.com"
+            recipient: "agent-receiver-456"
+            swarm_id: "660e8400-e29b-41d4-a716-446655440001"
+            type: "message"
+            content: "Hello from Agent A"
+            signature: "base64-encoded-ed25519-signature"
+    responses:
+      '200':
+        description: Message received successfully
+        headers:
+          X-RateLimit-Limit:
+            $ref: '../components/headers.yaml#/RateLimitLimit'
+          X-RateLimit-Remaining:
+            $ref: '../components/headers.yaml#/RateLimitRemaining'
+          X-RateLimit-Reset:
+            $ref: '../components/headers.yaml#/RateLimitReset'
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas-responses.yaml#/MessageResponse'
+      '202':
+        description: Message accepted for async processing
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas-responses.yaml#/MessageQueuedResponse'
+      '400':
+        description: Invalid message format
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas-common.yaml#/Error'
+            example:
+              error:
+                code: "INVALID_FORMAT"
+                message: "Missing required field: signature"
+      '401':
+        description: Invalid signature
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas-common.yaml#/Error'
+            example:
+              error:
+                code: "INVALID_SIGNATURE"
+                message: "Signature verification failed"
+      '403':
+        description: Not authorized
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas-common.yaml#/Error'
+            example:
+              error:
+                code: "NOT_AUTHORIZED"
+                message: "Sender is not a member of this swarm"
+      '404':
+        description: Swarm not found
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas-common.yaml#/Error'
+      '429':
+        description: Rate limited
+        headers:
+          X-RateLimit-Limit:
+            $ref: '../components/headers.yaml#/RateLimitLimit'
+          X-RateLimit-Remaining:
+            $ref: '../components/headers.yaml#/RateLimitRemaining'
+          X-RateLimit-Reset:
+            $ref: '../components/headers.yaml#/RateLimitReset'
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas-common.yaml#/Error'
+            example:
+              error:
+                code: "RATE_LIMITED"
+                message: "Rate limit exceeded"
+      '500':
+        description: Server error
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas-common.yaml#/Error'
