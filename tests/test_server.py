@@ -183,12 +183,45 @@ class TestJoinEndpoint:
         assert response.status_code == 401
         assert response.json()["error"]["code"] == "INVALID_SIGNATURE"
 
-    def test_rejects_already_member(
+    def test_idempotent_join_returns_membership(
         self, agent_config: AgentConfig, master_keypair, standard_headers: dict, tmp_path: Path,
     ) -> None:
+        """Joining twice with the same agent returns 200 both times."""
         private_key, pub_bytes = master_keypair
         master_pubkey_b64 = base64.b64encode(pub_bytes).decode("ascii")
-        db_path = tmp_path / "join_dup.db"
+        db_path = tmp_path / "join_idempotent.db"
+        _seed_swarm(db_path, master_pubkey_b64)
+        config = ServerConfig(agent=agent_config, db_path=db_path)
+        token = _make_jwt(
+            {"alg": "EdDSA", "typ": "JWT"},
+            {"swarm_id": SWARM_ID, "master": "master-agent",
+             "endpoint": "https://master.example.com/swarm", "iat": 1700000000},
+            private_key,
+        )
+        body = {
+            "type": "system", "action": "join_request", "invite_token": token,
+            "sender": {"agent_id": "new-agent-789", "endpoint": "https://newagent.example.com",
+                       "public_key": "bmV3LWFnZW50LXB1YmxpYy1rZXk="},
+        }
+        with TestClient(create_app(config)) as c:
+            first = c.post("/swarm/join", json=body, headers=standard_headers)
+            second = c.post("/swarm/join", json=body, headers=standard_headers)
+
+        assert first.status_code == 200
+        assert second.status_code == 200
+        assert first.json()["status"] == "accepted"
+        assert second.json()["status"] == "accepted"
+        assert first.json()["swarm_id"] == second.json()["swarm_id"]
+        assert set(m["agent_id"] for m in first.json()["members"]) == \
+               set(m["agent_id"] for m in second.json()["members"])
+
+    def test_existing_member_returns_membership(
+        self, agent_config: AgentConfig, master_keypair, standard_headers: dict, tmp_path: Path,
+    ) -> None:
+        """Master agent (already seeded) can re-join and get 200 with membership data."""
+        private_key, pub_bytes = master_keypair
+        master_pubkey_b64 = base64.b64encode(pub_bytes).decode("ascii")
+        db_path = tmp_path / "join_existing.db"
         _seed_swarm(db_path, master_pubkey_b64)
         config = ServerConfig(agent=agent_config, db_path=db_path)
         token = _make_jwt(
@@ -204,8 +237,12 @@ class TestJoinEndpoint:
         }
         with TestClient(create_app(config)) as c:
             response = c.post("/swarm/join", json=body, headers=standard_headers)
-        assert response.status_code == 409
-        assert response.json()["error"]["code"] == "NOT_AUTHORIZED"
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "accepted"
+        assert data["swarm_id"] == SWARM_ID
+        assert data["swarm_name"] == "Test Swarm"
+        assert any(m["agent_id"] == "master-agent" for m in data["members"])
 
     def test_pending_when_approval_required(
         self, agent_config: AgentConfig, master_keypair, standard_headers: dict, tmp_path: Path,

@@ -17,7 +17,6 @@ from src.server.models.responses import (
 from src.server.routes._join_helpers import extract_swarm_id, find_master_public_key
 from src.state.database import DatabaseManager
 from src.state.join import (
-    AlreadyMemberError,
     ApprovalRequiredError,
     SwarmNotFoundError,
     lookup_swarm,
@@ -41,7 +40,11 @@ def create_join_router(config: ServerConfig, db: DatabaseManager) -> APIRouter:
     async def join_swarm(
         request: Request, body: JoinRequest,
     ) -> Union[JoinAcceptedResponse, JoinPendingResponse, JSONResponse]:
-        """Handle a request to join a swarm."""
+        """Handle a request to join a swarm.
+
+        Idempotent: if the agent is already a member, returns 200 with
+        current membership data instead of 409.
+        """
         try:
             swarm_id = extract_swarm_id(body.invite_token)
         except TokenPayloadError as exc:
@@ -66,8 +69,6 @@ def create_join_router(config: ServerConfig, db: DatabaseManager) -> APIRouter:
             return _error(400, "INVALID_TOKEN", str(exc))
         except SwarmNotFoundError as exc:
             return _error(404, "SWARM_NOT_FOUND", str(exc))
-        except AlreadyMemberError as exc:
-            return _error(409, "NOT_AUTHORIZED", str(exc))
         except ApprovalRequiredError as exc:
             logger.info("Join pending for '%s' in '%s'", body.sender.agent_id, swarm_id)
             return JSONResponse(
