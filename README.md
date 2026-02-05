@@ -61,78 +61,188 @@ A group of agents that can communicate. One agent is the **master** (creator), o
 
 ```bash
 # Install
-pip install agent-swarm
+pip install agent-swarm-protocol
 
-# Initialize (creates Angie config, generates keys)
-swarm init --domain my-agent.example.com
+# Initialize your agent (creates config, generates Ed25519 keypair)
+swarm init --agent-id my-agent --endpoint https://my-agent.example.com/swarm
 
 # Create a swarm
-swarm create --name "dev-team"
+swarm create --name "My Swarm"
 
-# Generate invite
-swarm invite --swarm dev-team
+# Generate an invite for others
+swarm invite --swarm <swarm-id>
 
 # Join a swarm (other agent)
 swarm join --token <invite-token>
 
-# Send message
-swarm send --swarm dev-team "Hello, swarm!"
+# Send a message to the swarm
+swarm send --swarm <swarm-id> --message "Hello, swarm!"
+
+# Check status
+swarm status
 ```
+
+See [CLI Reference](docs/CLI.md) for the full command documentation.
 
 ## Docker Deployment
 
+The stack uses Angie (HTTP/3 reverse proxy) + FastAPI (protocol handler) via Docker Compose.
+
 ```bash
-# Clone and configure
 git clone https://github.com/finml-sage/agent-swarm-protocol.git
 cd agent-swarm-protocol
 cp .env.example .env
 # Edit .env with your agent details
-
-# Development mode (self-signed certs)
-./docker/angie/certs/generate-dev-certs.sh
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up
-
-# Production
-docker compose up -d
 ```
 
-See [Docker Deployment Guide](docs/DOCKER.md) for full documentation.
+For the full setup -- including directory creation (`data/`, `keys/`, `logs/`),
+Ed25519 key generation, development mode with self-signed certs, and production
+deployment -- see the [Docker Deployment Guide](docs/DOCKER.md).
 
 ## Documentation
 
-- [Protocol Specification](docs/PROTOCOL.md)
-- [Message Schema](docs/MESSAGE-SCHEMA.md)
-- [Server Setup](docs/SERVER-SETUP.md)
-- [Claude Code Integration](docs/CLAUDE-INTEGRATION.md)
-- [CLI Reference](docs/CLI.md)
-- [Docker Deployment](docs/DOCKER.md)
+- [Protocol Specification](docs/PROTOCOL.md) - Message format, swarm operations, security
+- [REST API Reference](docs/API.md) - HTTP endpoints and request/response formats
+- [Swarm Operations](docs/OPERATIONS.md) - Detailed operation payloads and flows
+- [Invite Tokens](docs/INVITE-TOKENS.md) - JWT token format and validation
+- [Server Setup](docs/SERVER-SETUP.md) - Bare-metal server deployment
+- [Claude Code Integration](docs/CLAUDE-INTEGRATION.md) - Wake triggers and session management
+- [CLI Reference](docs/CLI.md) - Command-line interface usage
+- [Docker Deployment](docs/DOCKER.md) - Containerized deployment with Angie + FastAPI
+
+## Development Setup
+
+### Prerequisites
+
+- Python 3.10+ (`python3 --version`)
+- On Ubuntu/Debian: `sudo apt install python3.12-venv` (or your Python version's venv package)
+
+### Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/finml-sage/agent-swarm-protocol.git
+cd agent-swarm-protocol
+
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install in editable mode with dev dependencies
+pip install -e ".[dev]"
+```
+
+### Running Tests
+
+```bash
+pytest tests/ -v
+```
+
+All 167 tests should pass. The test suite covers server, client, state, CLI, and Claude integration modules.
+
+### Code Quality
+
+```bash
+# Format code
+black src/ tests/
+
+# Lint
+ruff check src/ tests/
+```
 
 ## Project Structure
 
 ```
 agent-swarm-protocol/
+├── pyproject.toml           # Package config, dependencies, tool settings
 ├── .env.example             # Environment variable template
 ├── Dockerfile               # Production container image
 ├── Dockerfile.dev           # Development container image
 ├── docker-compose.yml       # Production stack orchestration
 ├── docker-compose.dev.yml   # Development overrides
 ├── docker/
-│   └── angie/               # Angie HTTP/3 reverse proxy configs
-│       ├── angie.conf       # Production Angie config
-│       ├── angie.dev.conf   # Development Angie config
+│   └── angie/               # Angie HTTP/3 reverse proxy
+│       ├── angie.conf       # Production config
+│       ├── angie.dev.conf   # Development config
+│       ├── Dockerfile       # Angie container build
+│       ├── docker-entrypoint.sh
+│       ├── acme/            # ACME challenge directory
 │       ├── certs/           # Dev certificate generation
-│       └── conf.d/          # Modular config (SSL, rate limiting, etc.)
-├── docs/                    # Documentation
-├── schemas/                 # OpenAPI and message schemas
+│       │   └── generate-dev-certs.sh
+│       ├── conf.d/          # Modular config includes
+│       │   ├── locations.conf
+│       │   ├── proxy_params.conf
+│       │   ├── rate_limit.conf
+│       │   ├── security.conf
+│       │   ├── ssl.conf
+│       │   └── ssl.dev.conf
+│       └── templates/       # Angie template configs
+├── docs/
+│   ├── PROTOCOL.md          # Protocol specification (v0.1.0)
+│   ├── API.md               # REST API reference
+│   ├── OPERATIONS.md        # Swarm operations detail
+│   ├── INVITE-TOKENS.md     # Invite token format (JWT)
+│   ├── CLI.md               # CLI command reference
+│   ├── DOCKER.md            # Docker deployment guide
+│   ├── SERVER-SETUP.md      # Bare-metal server setup
+│   ├── CLAUDE-INTEGRATION.md # Claude Code SDK integration
+│   └── api/                 # Per-endpoint API docs
+│       ├── endpoint-health.md
+│       ├── endpoint-info.md
+│       ├── endpoint-join.md
+│       ├── endpoint-message.md
+│       └── headers-errors.md
+├── schemas/
+│   ├── message.json         # Message JSON Schema (2020-12)
+│   ├── membership-state.json
+│   ├── invite-token.json
+│   ├── openapi/             # OpenAPI 3.1 specification
+│   ├── operations/          # Per-operation JSON schemas
+│   └── types/               # Shared type definitions
 ├── src/
 │   ├── server/              # FastAPI message handler
+│   │   ├── app.py           # Application factory
+│   │   ├── config.py        # Server configuration
+│   │   ├── errors.py        # Error handlers
+│   │   ├── queue.py         # Message queue
+│   │   ├── middleware/      # Rate limiting, logging
+│   │   ├── models/          # Pydantic request/response models
+│   │   └── routes/          # Endpoint handlers (health, info, join, message)
 │   ├── client/              # Python client library
+│   │   ├── client.py        # SwarmClient
+│   │   ├── crypto.py        # Ed25519 signing/verification
+│   │   ├── message.py       # Message model
+│   │   ├── builder.py       # MessageBuilder
+│   │   ├── operations.py    # Swarm operation helpers
+│   │   ├── tokens.py        # Invite token handling
+│   │   ├── transport.py     # HTTP/3 transport layer
+│   │   ├── types.py         # Type definitions
+│   │   └── exceptions.py    # Client exceptions
 │   ├── state/               # SQLite swarm state management
+│   │   ├── database.py      # DatabaseManager
+│   │   ├── export.py        # State export/import
+│   │   ├── models/          # Data models (member, message, mute, public_key)
+│   │   └── repositories/    # Data access (membership, messages, mutes, keys)
 │   ├── claude/              # Claude Code SDK integration
-│   └── cli/                 # CLI command implementations
-├── cli/                     # CLI entry point
+│   │   ├── context_loader.py
+│   │   ├── wake_trigger.py
+│   │   ├── response_handler.py
+│   │   ├── session_manager.py
+│   │   └── notification_preferences.py
+│   └── cli/                 # CLI (Typer)
+│       ├── main.py          # Entry point, app definition
+│       ├── commands/        # Per-command modules (init, create, invite, ...)
+│       ├── output/          # Formatters and JSON output
+│       └── utils/           # Config loading, input validation
 ├── tests/                   # Test suite (167+ tests)
-└── examples/                # Example configurations
+│   ├── test_server.py
+│   ├── conftest.py          # Shared fixtures
+│   ├── claude/              # Claude integration tests
+│   ├── cli/                 # CLI command tests
+│   ├── client/              # Client library tests
+│   └── state/               # State management tests
+├── cli/                     # (empty, placeholder)
+└── examples/                # (empty, placeholder)
 ```
 
 ## Contributing
