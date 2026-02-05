@@ -34,7 +34,6 @@ async def join_swarm(transport: Transport, token_url: str, agent_id: str, endpoi
         raise TransportError(f"Join failed: {resp.get('error', {}).get('message', resp) if resp else 'Unknown'}", status)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
     members = [SwarmMember(agent_id=m["agent_id"], endpoint=m["endpoint"], public_key=m["public_key"], joined_at=now) for m in resp.get("members", [])]
-    members.append(SwarmMember(agent_id=agent_id, endpoint=endpoint, public_key=pk_b64, joined_at=now))
     return SwarmMembership(swarm_id=tok["swarm_id"], name=resp.get("swarm_name", ""), master=tok["master"],
         members=members, joined_at=now, settings=SwarmSettings(allow_member_invite=False, require_approval=False))
 
