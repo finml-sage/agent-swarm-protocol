@@ -23,7 +23,7 @@ Phase 2: Server                    Phase 3: Client                    Phase 4: S
 ```
 
 ## Phase 1: Protocol Design
-**Status**: Ready
+**Status**: Complete
 **Dependencies**: None
 **Parallel**: No (foundation for everything)
 
@@ -37,14 +37,14 @@ Phase 2: Server                    Phase 3: Client                    Phase 4: S
 
 ### Deliverables
 - `docs/PROTOCOL.md`
-- `docs/MESSAGE-SCHEMA.md`
+- ~~`docs/MESSAGE-SCHEMA.md`~~ (covered in `docs/PROTOCOL.md` section 4)
 - `schemas/message.json`
 - `schemas/swarm-state.json`
 
 ---
 
 ## Phase 2: Server
-**Status**: Blocked (waiting on Phase 1)
+**Status**: Complete
 **Dependencies**: Phase 1
 **Parallel**: Yes (with Phases 3, 4)
 
@@ -58,15 +58,15 @@ Phase 2: Server                    Phase 3: Client                    Phase 4: S
 7. [ ] Health check endpoint
 
 ### Deliverables
-- `src/server/angie.conf.template`
-- `src/server/handler.py`
-- `src/server/auth.py`
-- `src/server/validation.py`
+- `docker/angie/angie.conf` (was `src/server/angie.conf.template`)
+- `src/server/app.py` (was `handler.py`)
+- `src/server/routes/` (endpoint handlers)
+- `src/server/middleware/` (rate limiting, logging)
 
 ---
 
 ## Phase 3: Client
-**Status**: Blocked (waiting on Phase 1)
+**Status**: Complete
 **Dependencies**: Phase 1
 **Parallel**: Yes (with Phases 2, 4)
 
@@ -88,7 +88,7 @@ Phase 2: Server                    Phase 3: Client                    Phase 4: S
 ---
 
 ## Phase 4: State Management
-**Status**: Blocked (waiting on Phase 1)
+**Status**: Complete
 **Dependencies**: Phase 1
 **Parallel**: Yes (with Phases 2, 3)
 
@@ -102,14 +102,14 @@ Phase 2: Server                    Phase 3: Client                    Phase 4: S
 
 ### Deliverables
 - `src/state/database.py`
-- `src/state/membership.py`
-- `src/state/mutes.py`
-- `src/state/schema.sql`
+- `src/state/repositories/membership.py`
+- `src/state/repositories/mutes.py`
+- `src/state/models/` (data models)
 
 ---
 
 ## Phase 5: Claude Code Integration
-**Status**: Blocked (waiting on Phases 2, 3, 4)
+**Status**: Complete
 **Dependencies**: Phases 2, 3, 4
 **Parallel**: No
 
@@ -122,15 +122,17 @@ Phase 2: Server                    Phase 3: Client                    Phase 4: S
 6. [ ] Claude Code SDK session management
 
 ### Deliverables
-- `src/claude/swarm-subagent/SKILL.md`
 - `src/claude/wake_trigger.py`
 - `src/claude/context_loader.py`
+- `src/claude/response_handler.py`
+- `src/claude/session_manager.py`
+- `src/claude/notification_preferences.py`
 - `docs/CLAUDE-INTEGRATION.md`
 
 ---
 
 ## Phase 6: CLI
-**Status**: Blocked (waiting on Phases 3, 4)
+**Status**: Complete
 **Dependencies**: Phases 3, 4
 **Parallel**: Partially (can start after Phase 3)
 
@@ -147,7 +149,8 @@ Phase 2: Server                    Phase 3: Client                    Phase 4: S
 10. [ ] `swarm status` - Show connection status
 
 ### Deliverables
-- `cli/swarm.py`
+- `src/cli/main.py` (was `cli/swarm.py`)
+- `src/cli/commands/` (per-command modules)
 - `docs/CLI.md`
 
 ---
