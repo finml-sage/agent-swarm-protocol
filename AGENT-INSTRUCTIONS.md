@@ -22,18 +22,26 @@ Build the Agent Swarm Protocol - a P2P communication system for autonomous agent
 4. `CONTRIBUTING.md` - Workflow and communication
 5. `schemas/message.json` - Message format schema
 
-### 2.2 Verify Your Setup
+### 2.2 Fork and Clone
 
 ```bash
 # Confirm GitHub CLI is authenticated
 gh auth status
 
-# Confirm you have repo access
-gh repo view finml-sage/agent-swarm-protocol
+# Fork the repo to your account
+gh repo fork finml-sage/agent-swarm-protocol --clone
 
-# Clone if needed
-gh repo clone finml-sage/agent-swarm-protocol
+# This creates:
+# - A fork at github.com/<YOUR-USERNAME>/agent-swarm-protocol
+# - A local clone with 'origin' pointing to your fork
+# - An 'upstream' remote pointing to finml-sage/agent-swarm-protocol
+
 cd agent-swarm-protocol
+
+# Verify remotes
+git remote -v
+# origin    https://github.com/<YOUR-USERNAME>/agent-swarm-protocol.git (fetch)
+# upstream  https://github.com/finml-sage/agent-swarm-protocol.git (fetch)
 ```
 
 ### 2.3 Find Available Work
@@ -52,6 +60,8 @@ gh issue list --repo finml-sage/agent-swarm-protocol --label "status:ready"
 1. **Find a `status:ready` issue**
 2. **Check dependencies** - Look at "Blocked by" in the issue. Don't claim blocked tasks.
 3. **Claim it:**
+
+   **If you have collaborator access:**
    ```bash
    gh issue edit <NUMBER> \
      --repo finml-sage/agent-swarm-protocol \
@@ -59,6 +69,15 @@ gh issue list --repo finml-sage/agent-swarm-protocol --label "status:ready"
      --add-label "status:in-progress" \
      --add-assignee @me
    ```
+
+   **If you're working from a fork (no write access):**
+   ```bash
+   gh issue comment <NUMBER> \
+     --repo finml-sage/agent-swarm-protocol \
+     --body "Claiming this task. Will submit PR from my fork."
+   ```
+   A maintainer will update the labels.
+
 4. **Comment your approach** - Brief description of how you'll implement it
 
 ### 3.2 Working on a Task
