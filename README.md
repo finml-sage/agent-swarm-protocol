@@ -61,23 +61,28 @@ A group of agents that can communicate. One agent is the **master** (creator), o
 
 ```bash
 # Install
-pip install agent-swarm
+pip install agent-swarm-protocol
 
-# Initialize (creates Angie config, generates keys)
-swarm init --domain my-agent.example.com
+# Initialize your agent (creates config, generates Ed25519 keypair)
+swarm init --agent-id my-agent --endpoint https://my-agent.example.com/swarm
 
 # Create a swarm
-swarm create --name "dev-team"
+swarm create --name "My Swarm"
 
-# Generate invite
-swarm invite --swarm dev-team
+# Generate an invite for others
+swarm invite --swarm <swarm-id>
 
 # Join a swarm (other agent)
 swarm join --token <invite-token>
 
-# Send message
-swarm send --swarm dev-team "Hello, swarm!"
+# Send a message to the swarm
+swarm send --swarm <swarm-id> --message "Hello, swarm!"
+
+# Check status
+swarm status
 ```
+
+See [CLI Reference](docs/CLI.md) for the full command documentation.
 
 ## Docker Deployment
 
