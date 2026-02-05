@@ -2,7 +2,7 @@
 import logging
 import sqlite3
 from datetime import datetime, timezone
-from typing import Union
+from typing import Optional, Union
 
 from fastapi import APIRouter, Request, status
 
@@ -12,6 +12,7 @@ from src.server.queue import MessageQueue
 from src.state.database import DatabaseManager
 from src.state.models.message import QueuedMessage
 from src.state.repositories.messages import MessageRepository
+from src.claude.wake_trigger import WakeTrigger, WakeTriggerError
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,9 @@ def create_message_router(
 
         Idempotent: re-posting a message with the same message_id
         returns 'queued' without raising an error.
+
+        After persistence, the wake trigger (if configured) evaluates
+        whether to WAKE, QUEUE, or SKIP the message.
         """
         message = QueuedMessage(
             message_id=body.message_id,
@@ -54,6 +58,27 @@ def create_message_router(
                     body.message_id,
                 )
         await queue.put(body)
+
+        # Fire-and-forget wake trigger evaluation (non-blocking)
+        wake_trigger: Optional[WakeTrigger] = getattr(
+            request.app.state, "wake_trigger", None,
+        )
+        if wake_trigger is not None:
+            try:
+                event = await wake_trigger.process_message(message)
+                logger.info(
+                    "Wake trigger: message=%s decision=%s",
+                    body.message_id,
+                    event.decision.value,
+                )
+            except WakeTriggerError as exc:
+                # Log but do not fail the message acceptance
+                logger.warning(
+                    "Wake trigger failed for message %s: %s",
+                    body.message_id,
+                    exc,
+                )
+
         return MessageQueuedResponse(
             status="queued", message_id=body.message_id,
         )
