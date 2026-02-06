@@ -72,35 +72,34 @@ class TestFormatNotification:
 
 
 # ---------------------------------------------------------------------------
-# Unit tests: invoke_tmux (subprocess)
+# Unit tests: invoke_tmux (subprocess shell)
 # ---------------------------------------------------------------------------
 
 
 class TestInvokeTmux:
     @pytest.mark.asyncio
-    async def test_calls_tmux_send_keys(self) -> None:
-        """Verifies the correct tmux send-keys command is executed."""
+    async def test_calls_tmux_send_keys_two_step(self) -> None:
+        """Verifies the two-step tmux send-keys shell command."""
         proc = _mock_process(returncode=0)
         cfg = TmuxInvokeConfig(tmux_target="main:0")
-        with patch("src.server.invoke_tmux.asyncio.create_subprocess_exec",
-                    return_value=proc) as mock_exec:
+        with patch("src.server.invoke_tmux.asyncio.create_subprocess_shell",
+                    return_value=proc) as mock_shell:
             await invoke_tmux(_wake_payload(), cfg)
 
-        mock_exec.assert_called_once()
-        args = mock_exec.call_args[0]
-        assert args[0] == "tmux"
-        assert args[1] == "send-keys"
-        assert args[2] == "-t"
-        assert args[3] == "main:0"
-        assert "sender-agent-123" in args[4]
-        assert args[5] == "C-m"
+        mock_shell.assert_called_once()
+        cmd = mock_shell.call_args[0][0]
+        # Must contain two separate send-keys calls with sleep between
+        assert "tmux send-keys -t main:0" in cmd
+        assert "sleep 0.3" in cmd
+        assert "tmux send-keys -t main:0 C-m" in cmd
+        assert "sender-agent-123" in cmd
 
     @pytest.mark.asyncio
     async def test_returns_none(self) -> None:
         """invoke_tmux returns None (no session_id)."""
         proc = _mock_process(returncode=0)
         cfg = TmuxInvokeConfig(tmux_target="main:0")
-        with patch("src.server.invoke_tmux.asyncio.create_subprocess_exec",
+        with patch("src.server.invoke_tmux.asyncio.create_subprocess_shell",
                     return_value=proc):
             result = await invoke_tmux(_wake_payload(), cfg)
         assert result is None
@@ -110,7 +109,7 @@ class TestInvokeTmux:
         """Non-zero exit code from tmux raises RuntimeError."""
         proc = _mock_process(returncode=1, stderr=b"session not found: main:0")
         cfg = TmuxInvokeConfig(tmux_target="main:0")
-        with patch("src.server.invoke_tmux.asyncio.create_subprocess_exec",
+        with patch("src.server.invoke_tmux.asyncio.create_subprocess_shell",
                     return_value=proc):
             with pytest.raises(RuntimeError, match="tmux send-keys failed"):
                 await invoke_tmux(_wake_payload(), cfg)
@@ -120,7 +119,7 @@ class TestInvokeTmux:
         """RuntimeError includes stderr content."""
         proc = _mock_process(returncode=1, stderr=b"no server running")
         cfg = TmuxInvokeConfig(tmux_target="main:0")
-        with patch("src.server.invoke_tmux.asyncio.create_subprocess_exec",
+        with patch("src.server.invoke_tmux.asyncio.create_subprocess_shell",
                     return_value=proc):
             with pytest.raises(RuntimeError, match="no server running"):
                 await invoke_tmux(_wake_payload(), cfg)
@@ -130,12 +129,28 @@ class TestInvokeTmux:
         """Tmux target from config is passed to send-keys."""
         proc = _mock_process(returncode=0)
         cfg = TmuxInvokeConfig(tmux_target="orchestrator:1.2")
-        with patch("src.server.invoke_tmux.asyncio.create_subprocess_exec",
-                    return_value=proc) as mock_exec:
+        with patch("src.server.invoke_tmux.asyncio.create_subprocess_shell",
+                    return_value=proc) as mock_shell:
             await invoke_tmux(_wake_payload(), cfg)
 
-        args = mock_exec.call_args[0]
-        assert args[3] == "orchestrator:1.2"
+        cmd = mock_shell.call_args[0][0]
+        assert "tmux send-keys -t orchestrator:1.2" in cmd
+
+    @pytest.mark.asyncio
+    async def test_command_uses_shell_chaining(self) -> None:
+        """Verifies the command chains with && for reliability."""
+        proc = _mock_process(returncode=0)
+        cfg = TmuxInvokeConfig(tmux_target="nexus")
+        with patch("src.server.invoke_tmux.asyncio.create_subprocess_shell",
+                    return_value=proc) as mock_shell:
+            await invoke_tmux(_wake_payload(), cfg)
+
+        cmd = mock_shell.call_args[0][0]
+        parts = cmd.split(" && ")
+        assert len(parts) == 3
+        assert parts[0].startswith("tmux send-keys -t nexus")
+        assert parts[1].strip() == "sleep 0.3"
+        assert parts[2].strip() == "tmux send-keys -t nexus C-m"
 
 
 # ---------------------------------------------------------------------------
