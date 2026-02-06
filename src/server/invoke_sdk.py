@@ -47,12 +47,25 @@ def _build_prompt(payload: dict) -> str:
     )
 
 
-async def invoke_sdk(payload: dict, config: SdkInvokeConfig) -> str:
+async def invoke_sdk(
+    payload: dict,
+    config: SdkInvokeConfig,
+    resume: Optional[str] = None,
+) -> str:
     """Invoke the agent via the Claude Agent SDK.
 
     Builds a prompt from the wake payload and calls ``query()``
-    with the configured SDK options.  Returns the session_id from
-    the ``ResultMessage`` for future conversation continuity.
+    with the configured SDK options.  When ``resume`` is provided,
+    the SDK continues the existing conversation instead of starting
+    a new one.
+
+    Args:
+        payload: The wake payload with message metadata.
+        config: SDK invocation configuration.
+        resume: Previous session_id to resume, or None for new session.
+
+    Returns:
+        The session_id from the ResultMessage for future continuity.
 
     Raises:
         RuntimeError: If the SDK query completes without a ResultMessage.
@@ -71,12 +84,14 @@ async def invoke_sdk(payload: dict, config: SdkInvokeConfig) -> str:
         max_turns=config.max_turns,
         model=config.model,
         setting_sources=["project"],
+        resume=resume,
     )
 
     logger.info(
-        "Invoking agent via SDK (cwd=%s, sender=%s)",
+        "Invoking agent via SDK (cwd=%s, sender=%s, resume=%s)",
         config.cwd,
         payload.get("sender_id", "unknown"),
+        resume,
     )
 
     session_id: Optional[str] = None

@@ -44,5 +44,7 @@ CREATE INDEX IF NOT EXISTS idx_queue_swarm ON message_queue(swarm_id);
 CREATE TABLE IF NOT EXISTS muted_agents (agent_id TEXT PRIMARY KEY, muted_at TEXT NOT NULL, reason TEXT);
 CREATE TABLE IF NOT EXISTS muted_swarms (swarm_id TEXT PRIMARY KEY, muted_at TEXT NOT NULL, reason TEXT);
 CREATE TABLE IF NOT EXISTS public_keys (agent_id TEXT PRIMARY KEY, public_key TEXT NOT NULL, fetched_at TEXT NOT NULL, endpoint TEXT);
+CREATE TABLE IF NOT EXISTS sdk_sessions (swarm_id TEXT NOT NULL, peer_id TEXT NOT NULL, session_id TEXT NOT NULL, last_active TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'active', PRIMARY KEY (swarm_id, peer_id));
+CREATE INDEX IF NOT EXISTS idx_sessions_last_active ON sdk_sessions(last_active);
 INSERT OR IGNORE INTO schema_versions (version, applied_at) VALUES ('1.0.0', datetime('now'));
 """
