@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from src.server.config import ServerConfig, load_config_from_env
 from src.server.errors import SwarmProtocolError, RateLimitedError
+from src.server.invoke_sdk import SdkInvokeConfig
 from src.server.invoker import AgentInvoker
 from src.server.middleware.rate_limit import RateLimitMiddleware
 from src.server.middleware.logging import RequestLoggingMiddleware
@@ -38,6 +39,24 @@ def _build_wake_trigger(
         wake_endpoint=config.wake.endpoint,
         preferences=NotificationPreferences(),
         wake_timeout=config.wake.timeout,
+    )
+
+
+def _build_invoker(config: ServerConfig) -> AgentInvoker:
+    """Build an AgentInvoker from the wake endpoint configuration."""
+    wep = config.wake_endpoint
+    sdk_config = None
+    if wep.invoke_method == "sdk":
+        sdk_config = SdkInvokeConfig(
+            cwd=wep.sdk_cwd,
+            permission_mode=wep.sdk_permission_mode,
+            max_turns=wep.sdk_max_turns,
+            model=wep.sdk_model,
+        )
+    return AgentInvoker(
+        method=wep.invoke_method,
+        target=wep.invoke_target,
+        sdk_config=sdk_config,
     )
 
 
@@ -95,10 +114,7 @@ def create_app(config: Optional[ServerConfig] = None) -> FastAPI:
             session_file=Path(config.wake_endpoint.session_file),
             session_timeout_minutes=config.wake_endpoint.session_timeout_minutes,
         )
-        invoker = AgentInvoker(
-            method=config.wake_endpoint.invoke_method,
-            target=config.wake_endpoint.invoke_target,
-        )
+        invoker = _build_invoker(config)
         app.include_router(
             create_wake_router(
                 session_manager=session_mgr,
