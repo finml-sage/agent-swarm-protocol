@@ -95,14 +95,30 @@ docker compose up -d
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `AGENT_ID` | Yes | - | Unique agent identifier |
-| `DOMAIN` | Yes | - | Public domain name |
+| `AGENT_ENDPOINT` | Yes | - | Public HTTPS endpoint URL |
 | `AGENT_PUBLIC_KEY` | Yes | - | Base64-encoded Ed25519 public key |
-| `PRIVATE_KEY_PATH` | Yes | `./keys/private.pem` | Path to private key |
+| `DOMAIN` | Yes (Docker) | - | Public domain name for TLS and Angie |
+| `PRIVATE_KEY_PATH` | No | `./keys/private.pem` | Path to private key file |
 | `AGENT_NAME` | No | - | Human-readable name |
 | `AGENT_DESCRIPTION` | No | - | Agent description |
 | `RATE_LIMIT_MESSAGES_PER_MINUTE` | No | `60` | Message rate limit |
 | `RATE_LIMIT_JOIN_PER_HOUR` | No | `10` | Join request rate limit |
-| `LOG_LEVEL` | No | `INFO` | Logging level |
+| `QUEUE_MAX_SIZE` | No | `10000` | Max queued messages |
+| `DB_PATH` | No | `data/swarm.db` | SQLite database path |
+| `WAKE_ENABLED` | No | `false` | Enable server-side wake trigger |
+| `WAKE_ENDPOINT` | When wake enabled | - | URL for wake trigger POSTs |
+| `WAKE_TIMEOUT` | No | `5.0` | Wake trigger HTTP timeout (seconds) |
+| `WAKE_EP_ENABLED` | No | `false` | Mount POST /api/wake endpoint |
+| `WAKE_EP_INVOKE_METHOD` | No | `noop` | Agent invocation: subprocess/webhook/noop |
+| `WAKE_EP_INVOKE_TARGET` | When method != noop | - | Command template or webhook URL |
+| `WAKE_EP_SECRET` | No | (empty) | Shared secret for X-Wake-Secret auth |
+| `WAKE_EP_SESSION_FILE` | No | `data/session.json` | Session state file path |
+| `WAKE_EP_SESSION_TIMEOUT` | No | `30` | Session expiry (minutes) |
+
+> **Note:** Wake variables are opt-in. Leave `WAKE_ENABLED` and
+> `WAKE_EP_ENABLED` at their defaults (`false`) unless you want to activate
+> the wake trigger and/or wake endpoint features.
+> See [CLAUDE-INTEGRATION.md](CLAUDE-INTEGRATION.md) for details.
 
 ### Volumes
 
