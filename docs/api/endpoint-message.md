@@ -31,6 +31,9 @@ X-Swarm-Protocol: 0.1.0
 
 ## Response (Success)
 
+Messages are persisted to SQLite before being queued. The response is always
+`"queued"` (not `"received"`) to reflect the persistence-first design.
+
 ```http
 HTTP/1.1 200 OK
 Content-Type: application/json
@@ -41,24 +44,24 @@ X-RateLimit-Reset: 1738765860
 
 ```json
 {
-  "status": "received",
-  "message_id": "550e8400-e29b-41d4-a716-446655440000"
-}
-```
-
-## Response (Accepted for Async Processing)
-
-```http
-HTTP/1.1 202 Accepted
-Content-Type: application/json
-```
-
-```json
-{
   "status": "queued",
   "message_id": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
+
+### Idempotent Duplicate Handling
+
+Re-posting a message with the same `message_id` returns 200 with
+`"status": "queued"` without raising an error. The duplicate is silently
+ignored at the database level.
+
+### Side Effects
+
+After persistence, the wake trigger (if configured via `WAKE_ENABLED=true`)
+evaluates the message against notification preferences. If the decision is
+WAKE, the trigger POSTs to the configured `WAKE_ENDPOINT` to activate the
+Claude subagent. Wake trigger failures are logged but never block the message
+acceptance.
 
 ## Response (Error)
 
