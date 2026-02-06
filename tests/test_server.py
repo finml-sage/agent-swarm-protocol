@@ -10,7 +10,9 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi.testclient import TestClient
 
 from src.server.app import create_app
-from src.server.config import ServerConfig, AgentConfig, RateLimitConfig
+from src.server.config import (
+    ServerConfig, AgentConfig, RateLimitConfig, WakeConfig, WakeEndpointConfig,
+)
 from src.state.database import DatabaseManager
 from src.state.models.member import SwarmMember, SwarmMembership, SwarmSettings
 from src.state.repositories.membership import MembershipRepository
@@ -18,6 +20,9 @@ from tests.conftest import _b64url_encode, _make_jwt
 
 
 SWARM_ID = "550e8400-e29b-41d4-a716-446655440000"
+
+_NO_WAKE = WakeConfig(enabled=False, endpoint="")
+_NO_WAKE_EP = WakeEndpointConfig(enabled=False)
 
 
 def _seed_swarm(db_path: Path, master_pubkey_b64: str) -> None:
@@ -100,7 +105,10 @@ class TestJoinEndpoint:
         master_pubkey_b64 = base64.b64encode(pub_bytes).decode("ascii")
         db_path = tmp_path / "join_accept.db"
         _seed_swarm(db_path, master_pubkey_b64)
-        config = ServerConfig(agent=agent_config, db_path=db_path)
+        config = ServerConfig(
+            agent=agent_config, db_path=db_path,
+            wake=_NO_WAKE, wake_endpoint=_NO_WAKE_EP,
+        )
         token = _make_jwt(
             {"alg": "EdDSA", "typ": "JWT"},
             {"swarm_id": SWARM_ID, "master": "master-agent",
@@ -147,7 +155,10 @@ class TestJoinEndpoint:
             private_key,
         )
         db_path = tmp_path / "join_unknown.db"
-        config = ServerConfig(agent=agent_config, db_path=db_path)
+        config = ServerConfig(
+            agent=agent_config, db_path=db_path,
+            wake=_NO_WAKE, wake_endpoint=_NO_WAKE_EP,
+        )
         body = {
             "type": "system", "action": "join_request", "invite_token": token,
             "sender": {"agent_id": "agent", "endpoint": "https://a.com",
@@ -165,7 +176,10 @@ class TestJoinEndpoint:
         master_pubkey_b64 = base64.b64encode(pub_bytes).decode("ascii")
         db_path = tmp_path / "join_forged.db"
         _seed_swarm(db_path, master_pubkey_b64)
-        config = ServerConfig(agent=agent_config, db_path=db_path)
+        config = ServerConfig(
+            agent=agent_config, db_path=db_path,
+            wake=_NO_WAKE, wake_endpoint=_NO_WAKE_EP,
+        )
         wrong_key = Ed25519PrivateKey.generate()
         token = _make_jwt(
             {"alg": "EdDSA", "typ": "JWT"},
@@ -191,7 +205,10 @@ class TestJoinEndpoint:
         master_pubkey_b64 = base64.b64encode(pub_bytes).decode("ascii")
         db_path = tmp_path / "join_idempotent.db"
         _seed_swarm(db_path, master_pubkey_b64)
-        config = ServerConfig(agent=agent_config, db_path=db_path)
+        config = ServerConfig(
+            agent=agent_config, db_path=db_path,
+            wake=_NO_WAKE, wake_endpoint=_NO_WAKE_EP,
+        )
         token = _make_jwt(
             {"alg": "EdDSA", "typ": "JWT"},
             {"swarm_id": SWARM_ID, "master": "master-agent",
@@ -223,7 +240,10 @@ class TestJoinEndpoint:
         master_pubkey_b64 = base64.b64encode(pub_bytes).decode("ascii")
         db_path = tmp_path / "join_existing.db"
         _seed_swarm(db_path, master_pubkey_b64)
-        config = ServerConfig(agent=agent_config, db_path=db_path)
+        config = ServerConfig(
+            agent=agent_config, db_path=db_path,
+            wake=_NO_WAKE, wake_endpoint=_NO_WAKE_EP,
+        )
         token = _make_jwt(
             {"alg": "EdDSA", "typ": "JWT"},
             {"swarm_id": SWARM_ID, "master": "master-agent",
@@ -251,7 +271,10 @@ class TestJoinEndpoint:
         master_pubkey_b64 = base64.b64encode(pub_bytes).decode("ascii")
         db_path = tmp_path / "join_approval.db"
         _seed_approval_swarm(db_path, master_pubkey_b64)
-        config = ServerConfig(agent=agent_config, db_path=db_path)
+        config = ServerConfig(
+            agent=agent_config, db_path=db_path,
+            wake=_NO_WAKE, wake_endpoint=_NO_WAKE_EP,
+        )
         token = _make_jwt(
             {"alg": "EdDSA", "typ": "JWT"},
             {"swarm_id": SWARM_ID, "master": "master-agent",
@@ -281,6 +304,7 @@ class TestHealthEndpoint:
         config = ServerConfig(
             agent=agent_config, rate_limit=RateLimitConfig(messages_per_minute=100),
             queue_max_size=10, db_path=tmp_path / "health.db",
+            wake=_NO_WAKE, wake_endpoint=_NO_WAKE_EP,
         )
         with TestClient(create_app(config)) as c:
             for i in range(9):
@@ -305,6 +329,7 @@ class TestRateLimitMiddleware:
         config = ServerConfig(
             agent=agent_config, rate_limit=RateLimitConfig(messages_per_minute=3),
             queue_max_size=100, db_path=tmp_path / "ratelimit.db",
+            wake=_NO_WAKE, wake_endpoint=_NO_WAKE_EP,
         )
         with TestClient(create_app(config)) as c:
             for _ in range(3):

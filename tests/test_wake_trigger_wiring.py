@@ -8,14 +8,21 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.server.app import create_app
-from src.server.config import AgentConfig, RateLimitConfig, ServerConfig, WakeConfig
+from src.server.config import (
+    AgentConfig, RateLimitConfig, ServerConfig, WakeConfig, WakeEndpointConfig,
+    _parse_bool,
+)
 from src.claude.wake_trigger import WakeDecision, WakeTrigger
 from src.state.database import DatabaseManager
 from src.state.repositories.messages import MessageRepository
 
 
 def _make_config(tmp_path: Path, wake_enabled: bool = False) -> ServerConfig:
-    """Build a ServerConfig with optional wake trigger."""
+    """Build a ServerConfig with optional wake trigger.
+
+    Explicitly disables the wake endpoint to avoid needing an invoke
+    target in test context.
+    """
     return ServerConfig(
         agent=AgentConfig(
             agent_id="test-agent-001",
@@ -31,6 +38,7 @@ def _make_config(tmp_path: Path, wake_enabled: bool = False) -> ServerConfig:
             endpoint="http://localhost:9090/api/wake" if wake_enabled else "",
             timeout=2.0,
         ),
+        wake_endpoint=WakeEndpointConfig(enabled=False),
     )
 
 
@@ -220,12 +228,19 @@ class TestWakeTriggerEnabled:
 
 
 class TestWakeConfig:
-    """Test WakeConfig environment variable loading."""
+    """Test WakeConfig defaults and env variable loading."""
 
-    def test_wake_disabled_by_default(self, tmp_path: Path) -> None:
-        """WakeConfig defaults to disabled."""
-        config = _make_config(tmp_path)
-        assert config.wake.enabled is False
+    def test_wake_enabled_by_default(self) -> None:
+        """WakeConfig dataclass defaults to enabled."""
+        config = WakeConfig()
+        assert config.enabled is True
+        assert config.endpoint == "http://localhost:8080/api/wake"
+
+    def test_wake_endpoint_enabled_by_default(self) -> None:
+        """WakeEndpointConfig dataclass defaults to enabled."""
+        config = WakeEndpointConfig()
+        assert config.enabled is True
+        assert config.invoke_method == "noop"
 
     def test_wake_config_values_propagated(self, tmp_path: Path) -> None:
         """WakeConfig values from constructor are used."""
@@ -233,3 +248,27 @@ class TestWakeConfig:
         assert config.wake.enabled is True
         assert config.wake.endpoint == "http://localhost:9090/api/wake"
         assert config.wake.timeout == 2.0
+
+
+class TestParseBool:
+    """Test _parse_bool helper for env variable parsing."""
+
+    def test_empty_returns_default_true(self) -> None:
+        assert _parse_bool("", default=True) is True
+
+    def test_empty_returns_default_false(self) -> None:
+        assert _parse_bool("", default=False) is False
+
+    def test_true_values(self) -> None:
+        for val in ("true", "True", "TRUE", "1", "yes", "Yes"):
+            assert _parse_bool(val, default=False) is True
+
+    def test_false_values(self) -> None:
+        for val in ("false", "False", "FALSE", "0", "no", "No"):
+            assert _parse_bool(val, default=True) is False
+
+    def test_unrecognised_returns_default_with_warning(self) -> None:
+        """Unrecognised strings (typos) return the default and log a warning."""
+        assert _parse_bool("maybe", default=True) is True
+        assert _parse_bool("ture", default=True) is True
+        assert _parse_bool("maybe", default=False) is False

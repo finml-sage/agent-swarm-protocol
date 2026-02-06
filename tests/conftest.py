@@ -7,7 +7,9 @@ from tempfile import TemporaryDirectory
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi.testclient import TestClient
 from src.server.app import create_app
-from src.server.config import ServerConfig, AgentConfig, RateLimitConfig
+from src.server.config import (
+    ServerConfig, AgentConfig, RateLimitConfig, WakeConfig, WakeEndpointConfig,
+)
 
 
 def _b64url_encode(data: bytes) -> str:
@@ -39,6 +41,8 @@ def server_config(agent_config: AgentConfig, tmp_path: Path) -> ServerConfig:
     return ServerConfig(
         agent=agent_config, rate_limit=RateLimitConfig(messages_per_minute=60, join_requests_per_hour=10),
         queue_max_size=100, db_path=tmp_path / "test.db",
+        wake=WakeConfig(enabled=False, endpoint=""),
+        wake_endpoint=WakeEndpointConfig(enabled=False),
     )
 
 
