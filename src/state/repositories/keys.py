@@ -1,6 +1,6 @@
 """Public key repository."""
 import aiosqlite
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from typing import Optional
 from src.state.models.public_key import PublicKeyEntry
 
@@ -19,7 +19,4 @@ class PublicKeyRepository:
         return c.rowcount > 0
     async def get_all(self) -> list[PublicKeyEntry]:
         c = await self._conn.execute("SELECT * FROM public_keys")
-        return [PublicKeyEntry(agent_id=r["agent_id"], public_key=r["public_key"], fetched_at=datetime.fromisoformat(r["fetched_at"]), endpoint=r["endpoint"]) for r in await c.fetchall()]
-    async def get_stale(self, ttl_hours: int = 24) -> list[PublicKeyEntry]:
-        c = await self._conn.execute("SELECT * FROM public_keys WHERE fetched_at < ?", ((datetime.now(timezone.utc) - timedelta(hours=ttl_hours)).isoformat(),))
         return [PublicKeyEntry(agent_id=r["agent_id"], public_key=r["public_key"], fetched_at=datetime.fromisoformat(r["fetched_at"]), endpoint=r["endpoint"]) for r in await c.fetchall()]

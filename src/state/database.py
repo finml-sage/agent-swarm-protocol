@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import AsyncIterator
 
 class DatabaseError(Exception): pass
-class DatabaseNotInitializedError(DatabaseError): pass
 
 class DatabaseManager:
     def __init__(self, db_path: Path) -> None:
@@ -18,7 +17,6 @@ class DatabaseManager:
     async def initialize(self) -> None:
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         async with self.connection() as conn:
-            await conn.execute("PRAGMA foreign_keys = ON")
             await conn.executescript(_SCHEMA)
             await conn.commit()
         self._initialized = True

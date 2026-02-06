@@ -1,8 +1,8 @@
 """Invite token validation using Ed25519 signatures."""
 import base64
 import json
-import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -134,8 +134,6 @@ def verify_invite_token(
 
     if claims.get("expires_at"):
         try:
-            from datetime import datetime, timezone
-
             exp_dt = datetime.fromisoformat(claims["expires_at"])
             if exp_dt.tzinfo is None:
                 exp_dt = exp_dt.replace(tzinfo=timezone.utc)

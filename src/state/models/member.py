@@ -1,7 +1,6 @@
 """Swarm member models."""
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
 
 @dataclass(frozen=True)
 class SwarmSettings:
@@ -28,7 +27,6 @@ class SwarmMembership:
     members: tuple[SwarmMember, ...]
     joined_at: datetime
     settings: SwarmSettings = field(default_factory=SwarmSettings)
-    nickname: Optional[str] = None
     def __post_init__(self) -> None:
         if not self.swarm_id: raise ValueError("swarm_id cannot be empty")
         if not self.name: raise ValueError("name cannot be empty")
