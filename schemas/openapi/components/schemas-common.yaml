@@ -56,10 +56,21 @@ Error:
           type: string
           enum:
             - INVALID_FORMAT
+            - INVALID_TOKEN
+            - TOKEN_EXPIRED
+            - TOKEN_EXHAUSTED
             - INVALID_SIGNATURE
             - NOT_AUTHORIZED
+            - NOT_MASTER
+            - NOT_MEMBER
+            - INVITES_DISABLED
+            - APPROVAL_REQUIRED
+            - TRANSFER_DECLINED
             - SWARM_NOT_FOUND
-            - INVALID_TOKEN
+            - MEMBER_NOT_FOUND
+            - ALREADY_MEMBER
+            - INVALID_SWARM_NAME
+            - STORAGE_ERROR
             - RATE_LIMITED
             - INTERNAL_ERROR
           description: Machine-readable error code

@@ -41,4 +41,30 @@ components:
   headers:
     $ref: 'components/headers.yaml'
   schemas:
-    $ref: 'components/schemas.yaml'
+    # Common types
+    Sender:
+      $ref: 'components/schemas-common.yaml#/Sender'
+    JoinSender:
+      $ref: 'components/schemas-common.yaml#/JoinSender'
+    Member:
+      $ref: 'components/schemas-common.yaml#/Member'
+    Error:
+      $ref: 'components/schemas-common.yaml#/Error'
+    # Request schemas
+    Message:
+      $ref: 'components/schemas-requests.yaml#/Message'
+    JoinRequest:
+      $ref: 'components/schemas-requests.yaml#/JoinRequest'
+    # Response schemas
+    MessageResponse:
+      $ref: 'components/schemas-responses.yaml#/MessageResponse'
+    MessageQueuedResponse:
+      $ref: 'components/schemas-responses.yaml#/MessageQueuedResponse'
+    JoinAcceptedResponse:
+      $ref: 'components/schemas-responses.yaml#/JoinAcceptedResponse'
+    JoinPendingResponse:
+      $ref: 'components/schemas-responses.yaml#/JoinPendingResponse'
+    HealthResponse:
+      $ref: 'components/schemas-responses.yaml#/HealthResponse'
+    AgentInfo:
+      $ref: 'components/schemas-responses.yaml#/AgentInfo'

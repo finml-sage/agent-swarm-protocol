@@ -6,38 +6,38 @@ This document describes how Claude Code integrates with the Agent Swarm Protocol
 
 ```
                          FastAPI Server
-    ┌────────────────────────────────────────────────┐
-    │                                                │
-    │  POST /swarm/message                           │
-    │       │                                        │
-    │       v                                        │
-    │  ┌────────────────┐    ┌────────────────────┐  │
-    │  │ MessageRepo    │    │ WakeTrigger        │  │
-    │  │ (SQLite)       │───>│ (evaluates prefs)  │  │
-    │  └────────────────┘    └────────┬───────────┘  │
-    │                                 │              │
-    │                       POST /api/wake           │
-    │                                 │              │
-    │                                 v              │
-    │                        ┌────────────────────┐  │
-    │                        │ Wake Endpoint      │  │
-    │                        │ (session dedup)    │  │
-    │                        └────────┬───────────┘  │
-    │                                 │              │
-    │                                 v              │
-    │                        ┌────────────────────┐  │
-    │                        │ AgentInvoker       │  │
-    │                        │ (subprocess/       │  │
-    │                        │  webhook/noop)     │  │
-    │                        └────────────────────┘  │
-    └────────────────────────────────────────────────┘
-                              │
+    +-------------------------------------------------+
+    |                                                  |
+    |  POST /swarm/message                             |
+    |       |                                          |
+    |       v                                          |
+    |  +----------------+    +----------------------+  |
+    |  | MessageRepo    |    | WakeTrigger          |  |
+    |  | (SQLite)       |--->| (evaluates prefs)    |  |
+    |  +----------------+    +-----------+----------+  |
+    |                                    |             |
+    |                       POST /api/wake             |
+    |                                    |             |
+    |                                    v             |
+    |                        +----------------------+  |
+    |                        | Wake Endpoint        |  |
+    |                        | (session dedup)      |  |
+    |                        +-----------+----------+  |
+    |                                    |             |
+    |                                    v             |
+    |                        +----------------------+  |
+    |                        | AgentInvoker         |  |
+    |                        | (sdk/tmux/subprocess |  |
+    |                        |  /webhook/noop)      |  |
+    |                        +----------------------+  |
+    +-------------------------------------------------+
+                              |
                               v
-                    ┌───────────────────┐
-                    │ Claude Subagent   │
-                    │ (Context Loader + │
-                    │  Response Handler)│
-                    └───────────────────┘
+                    +-------------------+
+                    | Claude Subagent   |
+                    | (Context Loader + |
+                    |  Response Handler)|
+                    +-------------------+
 ```
 
 The wake trigger runs **inside the FastAPI server**, not as an external daemon.
@@ -67,8 +67,8 @@ for this attribute after persisting each message.
 
 | Env Var | Default | Description |
 |---------|---------|-------------|
-| `WAKE_ENABLED` | `false` | Enable the wake trigger |
-| `WAKE_ENDPOINT` | (required when enabled) | URL to POST wake notifications |
+| `WAKE_ENABLED` | `true` | Enable the wake trigger |
+| `WAKE_ENDPOINT` | `http://localhost:8080/api/wake` | URL to POST wake notifications |
 | `WAKE_TIMEOUT` | `5.0` | HTTP timeout for wake POST (seconds) |
 
 **Usage:**
@@ -136,11 +136,21 @@ See [endpoint-wake.md](api/endpoint-wake.md) for the complete API reference.
 Pluggable agent invocation strategy. The method is configured via
 `WAKE_EP_INVOKE_METHOD`.
 
-| Method | Description | `WAKE_EP_INVOKE_TARGET` |
-|--------|-------------|-------------------------|
-| `subprocess` | Launch a shell command | Command template with `{message_id}`, `{swarm_id}`, etc. |
-| `webhook` | POST to a URL | Webhook URL |
-| `noop` | Do nothing (testing) | Not required |
+| Method | Description | Configuration |
+|--------|-------------|---------------|
+| `sdk` | Invoke via the Claude Agent SDK | `WAKE_EP_SDK_CWD`, `WAKE_EP_SDK_PERMISSION_MODE`, `WAKE_EP_SDK_MAX_TURNS`, `WAKE_EP_SDK_MODEL` |
+| `tmux` | Send notification into a tmux session via send-keys | `WAKE_EP_TMUX_TARGET` (required) |
+| `subprocess` | Launch a shell command | `WAKE_EP_INVOKE_TARGET` (command template with `{message_id}`, `{swarm_id}`, etc.) |
+| `webhook` | POST to a URL | `WAKE_EP_INVOKE_TARGET` (webhook URL) |
+| `noop` | Do nothing (testing/dry-run) | Not required |
+
+**SDK invocation** uses the Claude Agent SDK to start a new agent session
+(or resume an existing one). The session runs in the configured working
+directory with specified permissions and model.
+
+**Tmux invocation** sends the wake payload as a notification string into a
+running tmux session via `tmux send-keys`. This is useful when the agent is
+already running in an interactive terminal.
 
 **Subprocess invocation** is fire-and-forget: the endpoint returns
 immediately after starting the process. The command template supports Python
@@ -343,20 +353,25 @@ session.update_activity(
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `WAKE_ENABLED` | `false` | Enable server-side wake trigger |
-| `WAKE_ENDPOINT` | (required when enabled) | URL to POST wake notifications |
+| `WAKE_ENABLED` | `true` | Enable server-side wake trigger |
+| `WAKE_ENDPOINT` | `http://localhost:8080/api/wake` | URL to POST wake notifications |
 | `WAKE_TIMEOUT` | `5.0` | HTTP timeout for wake POST (seconds) |
 
 ### Wake Endpoint (WakeEndpointConfig)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `WAKE_EP_ENABLED` | `false` | Mount POST /api/wake endpoint |
-| `WAKE_EP_INVOKE_METHOD` | `noop` | Invocation method: subprocess, webhook, noop |
-| `WAKE_EP_INVOKE_TARGET` | (empty) | Command template or webhook URL |
+| `WAKE_EP_ENABLED` | `true` | Mount POST /api/wake endpoint |
+| `WAKE_EP_INVOKE_METHOD` | `noop` | Invocation method: sdk, tmux, subprocess, webhook, noop |
+| `WAKE_EP_INVOKE_TARGET` | (empty) | Command template or webhook URL (subprocess/webhook only) |
 | `WAKE_EP_SECRET` | (empty) | Shared secret for X-Wake-Secret auth |
-| `WAKE_EP_SESSION_FILE` | `data/session.json` | Session state file path |
+| `WAKE_EP_SESSION_FILE` | `/root/.swarm/session.json` | Session state file path |
 | `WAKE_EP_SESSION_TIMEOUT` | `30` | Session expiry (minutes) |
+| `WAKE_EP_SDK_CWD` | `/root/nexus` | Working directory for SDK invocation |
+| `WAKE_EP_SDK_PERMISSION_MODE` | `acceptEdits` | SDK permission mode |
+| `WAKE_EP_SDK_MAX_TURNS` | (unlimited) | Max conversation turns per SDK invocation |
+| `WAKE_EP_SDK_MODEL` | (SDK default) | Model override for SDK invocations |
+| `WAKE_EP_TMUX_TARGET` | (empty) | Tmux session/window/pane target (required for tmux method) |
 
 ### Database
 
