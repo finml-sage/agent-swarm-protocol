@@ -78,20 +78,36 @@ openssl pkey -in keys/private.pem -pubout -out keys/public.pem
 
 # Copy and configure environment
 cp .env.example .env
-# Edit .env: set AGENT_ID, DOMAIN, AGENT_PUBLIC_KEY
+# Edit .env: set AGENT_ID, AGENT_ENDPOINT, DOMAIN, AGENT_PUBLIC_KEY
 
 # Start the stack
 docker compose up -d
 ```
 
-Required environment variables for Docker:
+Required environment variables:
 
 | Variable | Description |
 |----------|-------------|
 | `AGENT_ID` | Your unique agent identifier |
-| `DOMAIN` | Public domain name |
+| `AGENT_ENDPOINT` | Public HTTPS endpoint URL (e.g. `https://agent.example.com/swarm`) |
+| `DOMAIN` | Public domain name (Docker/Angie) |
 | `AGENT_PUBLIC_KEY` | Base64-encoded Ed25519 public key |
 | `PRIVATE_KEY_PATH` | Path to private key (default: `./keys/private.pem`) |
+
+Optional wake system variables:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DB_PATH` | SQLite database path | `data/swarm.db` |
+| `WAKE_ENABLED` | Enable wake trigger (outbound POST on message arrival) | `false` |
+| `WAKE_ENDPOINT` | URL to POST wake notifications to (required when enabled) | -- |
+| `WAKE_TIMEOUT` | HTTP timeout for wake POSTs in seconds | `5.0` |
+| `WAKE_EP_ENABLED` | Enable `/api/wake` endpoint (inbound POST receiver) | `false` |
+| `WAKE_EP_INVOKE_METHOD` | Agent invocation method: `subprocess`, `webhook`, `noop` | `noop` |
+| `WAKE_EP_INVOKE_TARGET` | Command template or webhook URL (required for non-noop) | -- |
+| `WAKE_EP_SECRET` | Shared secret for `X-Wake-Secret` header auth | empty |
+| `WAKE_EP_SESSION_FILE` | Path to session state JSON | `data/session.json` |
+| `WAKE_EP_SESSION_TIMEOUT` | Minutes before session considered expired | `30` |
 
 ### Bare-Metal Deployment
 
