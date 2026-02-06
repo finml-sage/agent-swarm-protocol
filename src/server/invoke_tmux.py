@@ -31,16 +31,16 @@ def _format_notification(payload: dict) -> str:
 async def invoke_tmux(payload: dict, config: TmuxInvokeConfig) -> None:
     """Send a notification into a tmux session via ``tmux send-keys``.
 
-    Uses two separate send-keys calls with a small delay between them.
-    The first call sends the text, the second sends C-m (Enter).
-    A single combined call does not reliably deliver the Enter key.
+    Uses two separate ``create_subprocess_exec`` calls with a sleep between
+    them.  The first sends the text, the second sends C-m (Enter).  A single
+    combined call does not reliably deliver the Enter key.
 
     Args:
         payload: The wake payload with message metadata.
         config: Tmux configuration (session target).
 
     Raises:
-        RuntimeError: If the tmux command fails (non-zero exit code).
+        RuntimeError: If either tmux command fails (non-zero exit code).
     """
     notification = _format_notification(payload)
     logger.info(
@@ -48,21 +48,34 @@ async def invoke_tmux(payload: dict, config: TmuxInvokeConfig) -> None:
     )
 
     target = config.tmux_target
-    cmd = (
-        f"tmux send-keys -t {target} '{notification}'"
-        f" && sleep 0.3"
-        f" && tmux send-keys -t {target} C-m"
-    )
-    process = await asyncio.create_subprocess_shell(
-        cmd,
+
+    # Step 1: send the text into the tmux pane
+    text_proc = await asyncio.create_subprocess_exec(
+        "tmux", "send-keys", "-t", target, notification,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
-    stdout, stderr = await process.communicate()
-
-    if process.returncode != 0:
-        err_msg = stderr.decode().strip() if stderr else "unknown error"
+    _, text_stderr = await text_proc.communicate()
+    if text_proc.returncode != 0:
+        err_msg = text_stderr.decode().strip() if text_stderr else "unknown error"
         raise RuntimeError(
-            f"tmux send-keys failed (exit {process.returncode}): {err_msg}"
+            f"tmux send-keys failed (exit {text_proc.returncode}): {err_msg}"
         )
+
+    # Step 2: wait for tmux to process the text
+    await asyncio.sleep(0.5)
+
+    # Step 3: send Enter (C-m)
+    enter_proc = await asyncio.create_subprocess_exec(
+        "tmux", "send-keys", "-t", target, "C-m",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, enter_stderr = await enter_proc.communicate()
+    if enter_proc.returncode != 0:
+        err_msg = enter_stderr.decode().strip() if enter_stderr else "unknown error"
+        raise RuntimeError(
+            f"tmux send-keys failed (exit {enter_proc.returncode}): {err_msg}"
+        )
+
     logger.info("Tmux notification sent successfully")

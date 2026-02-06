@@ -1,6 +1,6 @@
 """Tests for the tmux invoke method (subprocess-based, no SDK)."""
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
@@ -72,85 +72,156 @@ class TestFormatNotification:
 
 
 # ---------------------------------------------------------------------------
-# Unit tests: invoke_tmux (subprocess shell)
+# Unit tests: invoke_tmux (two separate exec calls)
 # ---------------------------------------------------------------------------
 
 
 class TestInvokeTmux:
     @pytest.mark.asyncio
     async def test_calls_tmux_send_keys_two_step(self) -> None:
-        """Verifies the two-step tmux send-keys shell command."""
-        proc = _mock_process(returncode=0)
+        """Verifies two separate create_subprocess_exec calls."""
+        text_proc = _mock_process(returncode=0)
+        enter_proc = _mock_process(returncode=0)
         cfg = TmuxInvokeConfig(tmux_target="main:0")
-        with patch("src.server.invoke_tmux.asyncio.create_subprocess_shell",
-                    return_value=proc) as mock_shell:
+        with patch(
+            "src.server.invoke_tmux.asyncio.create_subprocess_exec",
+            side_effect=[text_proc, enter_proc],
+        ) as mock_exec, patch(
+            "src.server.invoke_tmux.asyncio.sleep", new_callable=AsyncMock,
+        ) as mock_sleep:
             await invoke_tmux(_wake_payload(), cfg)
 
-        mock_shell.assert_called_once()
-        cmd = mock_shell.call_args[0][0]
-        # Must contain two separate send-keys calls with sleep between
-        assert "tmux send-keys -t main:0" in cmd
-        assert "sleep 0.3" in cmd
-        assert "tmux send-keys -t main:0 C-m" in cmd
-        assert "sender-agent-123" in cmd
+        assert mock_exec.call_count == 2
+        # First call sends the notification text
+        text_call = mock_exec.call_args_list[0]
+        assert text_call[0][0] == "tmux"
+        assert text_call[0][1] == "send-keys"
+        assert text_call[0][2] == "-t"
+        assert text_call[0][3] == "main:0"
+        assert "sender-agent-123" in text_call[0][4]
+        # Second call sends C-m (Enter)
+        enter_call = mock_exec.call_args_list[1]
+        assert enter_call[0] == ("tmux", "send-keys", "-t", "main:0", "C-m")
+        # Sleep between the two calls
+        mock_sleep.assert_called_once_with(0.5)
 
     @pytest.mark.asyncio
     async def test_returns_none(self) -> None:
         """invoke_tmux returns None (no session_id)."""
         proc = _mock_process(returncode=0)
         cfg = TmuxInvokeConfig(tmux_target="main:0")
-        with patch("src.server.invoke_tmux.asyncio.create_subprocess_shell",
-                    return_value=proc):
+        with patch(
+            "src.server.invoke_tmux.asyncio.create_subprocess_exec",
+            side_effect=[proc, _mock_process(returncode=0)],
+        ), patch("src.server.invoke_tmux.asyncio.sleep", new_callable=AsyncMock):
             result = await invoke_tmux(_wake_payload(), cfg)
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_raises_on_nonzero_exit(self) -> None:
-        """Non-zero exit code from tmux raises RuntimeError."""
-        proc = _mock_process(returncode=1, stderr=b"session not found: main:0")
+    async def test_raises_on_text_send_failure(self) -> None:
+        """Non-zero exit from the first send-keys (text) raises RuntimeError."""
+        text_proc = _mock_process(
+            returncode=1, stderr=b"session not found: main:0",
+        )
         cfg = TmuxInvokeConfig(tmux_target="main:0")
-        with patch("src.server.invoke_tmux.asyncio.create_subprocess_shell",
-                    return_value=proc):
+        with patch(
+            "src.server.invoke_tmux.asyncio.create_subprocess_exec",
+            side_effect=[text_proc],
+        ):
             with pytest.raises(RuntimeError, match="tmux send-keys failed"):
                 await invoke_tmux(_wake_payload(), cfg)
 
     @pytest.mark.asyncio
-    async def test_error_message_includes_stderr(self) -> None:
-        """RuntimeError includes stderr content."""
-        proc = _mock_process(returncode=1, stderr=b"no server running")
+    async def test_raises_on_enter_send_failure(self) -> None:
+        """Non-zero exit from the second send-keys (C-m) raises RuntimeError."""
+        text_proc = _mock_process(returncode=0)
+        enter_proc = _mock_process(returncode=1, stderr=b"no server running")
         cfg = TmuxInvokeConfig(tmux_target="main:0")
-        with patch("src.server.invoke_tmux.asyncio.create_subprocess_shell",
-                    return_value=proc):
+        with patch(
+            "src.server.invoke_tmux.asyncio.create_subprocess_exec",
+            side_effect=[text_proc, enter_proc],
+        ), patch("src.server.invoke_tmux.asyncio.sleep", new_callable=AsyncMock):
+            with pytest.raises(RuntimeError, match="no server running"):
+                await invoke_tmux(_wake_payload(), cfg)
+
+    @pytest.mark.asyncio
+    async def test_error_message_includes_stderr(self) -> None:
+        """RuntimeError includes stderr content from the failing call."""
+        text_proc = _mock_process(returncode=1, stderr=b"no server running")
+        cfg = TmuxInvokeConfig(tmux_target="main:0")
+        with patch(
+            "src.server.invoke_tmux.asyncio.create_subprocess_exec",
+            side_effect=[text_proc],
+        ):
             with pytest.raises(RuntimeError, match="no server running"):
                 await invoke_tmux(_wake_payload(), cfg)
 
     @pytest.mark.asyncio
     async def test_custom_target(self) -> None:
-        """Tmux target from config is passed to send-keys."""
-        proc = _mock_process(returncode=0)
+        """Tmux target from config is passed to both send-keys calls."""
+        text_proc = _mock_process(returncode=0)
+        enter_proc = _mock_process(returncode=0)
         cfg = TmuxInvokeConfig(tmux_target="orchestrator:1.2")
-        with patch("src.server.invoke_tmux.asyncio.create_subprocess_shell",
-                    return_value=proc) as mock_shell:
+        with patch(
+            "src.server.invoke_tmux.asyncio.create_subprocess_exec",
+            side_effect=[text_proc, enter_proc],
+        ) as mock_exec, patch(
+            "src.server.invoke_tmux.asyncio.sleep", new_callable=AsyncMock,
+        ):
             await invoke_tmux(_wake_payload(), cfg)
 
-        cmd = mock_shell.call_args[0][0]
-        assert "tmux send-keys -t orchestrator:1.2" in cmd
+        # Both calls use the custom target
+        text_call = mock_exec.call_args_list[0]
+        assert text_call[0][3] == "orchestrator:1.2"
+        enter_call = mock_exec.call_args_list[1]
+        assert enter_call[0][3] == "orchestrator:1.2"
 
     @pytest.mark.asyncio
-    async def test_command_uses_shell_chaining(self) -> None:
-        """Verifies the command chains with && for reliability."""
-        proc = _mock_process(returncode=0)
+    async def test_uses_exec_not_shell(self) -> None:
+        """Verifies create_subprocess_exec is used, not create_subprocess_shell."""
+        text_proc = _mock_process(returncode=0)
+        enter_proc = _mock_process(returncode=0)
         cfg = TmuxInvokeConfig(tmux_target="nexus")
-        with patch("src.server.invoke_tmux.asyncio.create_subprocess_shell",
-                    return_value=proc) as mock_shell:
+        with patch(
+            "src.server.invoke_tmux.asyncio.create_subprocess_exec",
+            side_effect=[text_proc, enter_proc],
+        ) as mock_exec, patch(
+            "src.server.invoke_tmux.asyncio.sleep", new_callable=AsyncMock,
+        ), patch(
+            "src.server.invoke_tmux.asyncio.create_subprocess_shell",
+        ) as mock_shell:
             await invoke_tmux(_wake_payload(), cfg)
 
-        cmd = mock_shell.call_args[0][0]
-        parts = cmd.split(" && ")
-        assert len(parts) == 3
-        assert parts[0].startswith("tmux send-keys -t nexus")
-        assert parts[1].strip() == "sleep 0.3"
-        assert parts[2].strip() == "tmux send-keys -t nexus C-m"
+        assert mock_exec.call_count == 2
+        mock_shell.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_sleep_between_calls(self) -> None:
+        """Confirms asyncio.sleep(0.5) is called between the two exec calls."""
+        text_proc = _mock_process(returncode=0)
+        enter_proc = _mock_process(returncode=0)
+        cfg = TmuxInvokeConfig(tmux_target="nexus")
+        call_order: list[str] = []
+
+        async def track_exec(*args: object, **kwargs: object) -> MagicMock:
+            call_order.append("exec")
+            if len(call_order) == 1:
+                return text_proc
+            return enter_proc
+
+        async def track_sleep(seconds: float) -> None:
+            call_order.append(f"sleep:{seconds}")
+
+        with patch(
+            "src.server.invoke_tmux.asyncio.create_subprocess_exec",
+            side_effect=track_exec,
+        ), patch(
+            "src.server.invoke_tmux.asyncio.sleep",
+            side_effect=track_sleep,
+        ):
+            await invoke_tmux(_wake_payload(), cfg)
+
+        assert call_order == ["exec", "sleep:0.5", "exec"]
 
 
 # ---------------------------------------------------------------------------
