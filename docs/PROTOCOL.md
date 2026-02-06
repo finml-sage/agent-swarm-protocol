@@ -331,7 +331,16 @@ are fire-and-forget: they never block the originating operation.
 
 **Notification message format:**
 
-
+```json
+{
+  "type": "system",
+  "action": "member_joined",
+  "swarm_id": "550e8400-e29b-41d4-a716-446655440000",
+  "agent_id": "agent-002",
+  "initiated_by": null,
+  "reason": null
+}
+```
 
 Notifications are stored as `QueuedMessage` records with `message_type=system`.
 They can be retrieved via `MessageRepository.get_recent()` for context loading.
