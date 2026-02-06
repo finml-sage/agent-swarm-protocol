@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from src.server.config import ServerConfig, load_config_from_env
 from src.server.errors import SwarmProtocolError, RateLimitedError
 from src.server.invoke_sdk import SdkInvokeConfig
+from src.server.invoke_tmux import TmuxInvokeConfig
 from src.server.invoker import AgentInvoker
 from src.server.middleware.rate_limit import RateLimitMiddleware
 from src.server.middleware.logging import RequestLoggingMiddleware
@@ -46,6 +47,7 @@ def _build_invoker(config: ServerConfig) -> AgentInvoker:
     """Build an AgentInvoker from the wake endpoint configuration."""
     wep = config.wake_endpoint
     sdk_config = None
+    tmux_config = None
     if wep.invoke_method == "sdk":
         sdk_config = SdkInvokeConfig(
             cwd=wep.sdk_cwd,
@@ -53,10 +55,13 @@ def _build_invoker(config: ServerConfig) -> AgentInvoker:
             max_turns=wep.sdk_max_turns,
             model=wep.sdk_model,
         )
+    if wep.invoke_method == "tmux":
+        tmux_config = TmuxInvokeConfig(tmux_target=wep.tmux_target)
     return AgentInvoker(
         method=wep.invoke_method,
         target=wep.invoke_target,
         sdk_config=sdk_config,
+        tmux_config=tmux_config,
     )
 
 

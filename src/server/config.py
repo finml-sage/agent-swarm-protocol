@@ -49,8 +49,10 @@ class WakeEndpointConfig:
 
     Enabled by default.  Set ``WAKE_EP_ENABLED=false`` to disable.
 
-    ``invoke_method``: how to start the agent -- 'subprocess', 'webhook', 'sdk', or 'noop'.
-    ``invoke_target``: command template (subprocess) or URL (webhook). Not used by sdk/noop.
+    ``invoke_method``: how to start the agent -- 'subprocess', 'webhook',
+        'sdk', 'tmux', or 'noop'.
+    ``invoke_target``: command template (subprocess) or URL (webhook).
+        Not used by sdk/tmux/noop.
     ``secret``: shared secret for X-Wake-Secret header auth. Empty disables auth.
     ``session_file``: path to session state file for duplicate-invocation guard.
     ``session_timeout_minutes``: how long before an active session is considered expired.
@@ -58,6 +60,7 @@ class WakeEndpointConfig:
     ``sdk_permission_mode``: SDK permission mode (e.g. 'acceptEdits').
     ``sdk_max_turns``: maximum conversation turns per SDK invocation.
     ``sdk_model``: model override for SDK invocations (None uses default).
+    ``tmux_target``: tmux session/window/pane target for the tmux relay method.
     """
 
     enabled: bool = True
@@ -70,6 +73,7 @@ class WakeEndpointConfig:
     sdk_permission_mode: str = "acceptEdits"
     sdk_max_turns: Optional[int] = None
     sdk_model: Optional[str] = None
+    tmux_target: str = ""
 
 
 @dataclass(frozen=True)
@@ -145,6 +149,13 @@ def load_config_from_env() -> ServerConfig:
             f"and method is '{invoke_method}'"
         )
 
+    tmux_target = os.environ.get("WAKE_EP_TMUX_TARGET", "")
+    if wake_ep_enabled and invoke_method == "tmux" and not tmux_target:
+        raise ValueError(
+            "WAKE_EP_TMUX_TARGET required when WAKE_EP_INVOKE_METHOD is 'tmux'. "
+            "Set it to a tmux session target (e.g. 'main:0')."
+        )
+
     sdk_max_turns_raw = os.environ.get("WAKE_EP_SDK_MAX_TURNS")
     sdk_max_turns = int(sdk_max_turns_raw) if sdk_max_turns_raw else None
 
@@ -182,5 +193,6 @@ def load_config_from_env() -> ServerConfig:
             sdk_permission_mode=os.environ.get("WAKE_EP_SDK_PERMISSION_MODE", "acceptEdits"),
             sdk_max_turns=sdk_max_turns,
             sdk_model=os.environ.get("WAKE_EP_SDK_MODEL"),
+            tmux_target=tmux_target,
         ),
     )
