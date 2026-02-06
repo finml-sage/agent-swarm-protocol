@@ -2,7 +2,7 @@
 
 P2P agent communication protocol with master-master swarm architecture.
 
-~9,800 lines of code | 167+ tests | Production-ready with Docker deployment
+~9,800 lines of code | 269 tests | Production-ready with Docker deployment
 
 ## Overview
 
@@ -109,6 +109,7 @@ deployment -- see the [Docker Deployment Guide](docs/DOCKER.md).
 - [Claude Code Integration](docs/CLAUDE-INTEGRATION.md) - Wake triggers and session management
 - [CLI Reference](docs/CLI.md) - Command-line interface usage
 - [Docker Deployment](docs/DOCKER.md) - Containerized deployment with Angie + FastAPI
+- [Environment Variables](docs/ENVIRONMENT.md) - Complete environment variable reference
 
 ## Development Setup
 
@@ -138,7 +139,7 @@ pip install -e ".[dev]"
 pytest tests/ -v
 ```
 
-All 167 tests should pass. The test suite covers server, client, state, CLI, and Claude integration modules.
+All 269 tests should pass. The test suite covers server, client, state, CLI, and Claude integration modules.
 
 ### Code Quality
 
@@ -204,10 +205,13 @@ agent-swarm-protocol/
 │   │   ├── app.py           # Application factory
 │   │   ├── config.py        # Server configuration
 │   │   ├── errors.py        # Error handlers
+│   │   ├── invoker.py       # Pluggable agent invocation (subprocess/webhook/noop)
+│   │   ├── notifications.py # Lifecycle event notification service
 │   │   ├── queue.py         # Message queue
 │   │   ├── middleware/      # Rate limiting, logging
 │   │   ├── models/          # Pydantic request/response models
-│   │   └── routes/          # Endpoint handlers (health, info, join, message)
+│   │   └── routes/          # Endpoint handlers (health, info, join, message, wake)
+│   │       └── wake.py      # POST /api/wake endpoint
 │   ├── client/              # Python client library
 │   │   ├── client.py        # SwarmClient
 │   │   ├── crypto.py        # Ed25519 signing/verification
@@ -223,6 +227,7 @@ agent-swarm-protocol/
 │   │   ├── export.py        # State export/import
 │   │   ├── models/          # Data models (member, message, mute, public_key)
 │   │   └── repositories/    # Data access (membership, messages, mutes, keys)
+│   │       └── messages.py  # Message queue persistence and get_recent()
 │   ├── claude/              # Claude Code SDK integration
 │   │   ├── context_loader.py
 │   │   ├── wake_trigger.py
@@ -234,7 +239,7 @@ agent-swarm-protocol/
 │       ├── commands/        # Per-command modules (init, create, invite, ...)
 │       ├── output/          # Formatters and JSON output
 │       └── utils/           # Config loading, input validation
-├── tests/                   # Test suite (167+ tests)
+├── tests/                   # Test suite (269 tests)
 │   ├── test_server.py
 │   ├── conftest.py          # Shared fixtures
 │   ├── claude/              # Claude integration tests
