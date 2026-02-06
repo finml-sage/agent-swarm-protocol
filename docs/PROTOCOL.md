@@ -271,7 +271,12 @@ JWT Payload:
 }
 ```
 
-**Side Effect**: Master broadcasts `member_joined` to all existing members.
+**Idempotent**: If the agent is already a member, returns 200 with current
+membership data instead of 409. No `member_joined` notification is emitted
+for re-joins.
+
+**Side Effect**: On genuinely new joins, master persists a `member_joined`
+notification to the message queue and broadcasts to all existing members.
 
 ### 5.4 Leave Swarm
 
@@ -578,22 +583,44 @@ When importing:
 3. Merge or replace based on agent configuration
 4. Remove `exported_at` field after import
 
-### 9.6 Message Queue
+### 9.6 Message Queue and Persistence
 
-Incoming messages are queued for processing:
+Incoming messages are persisted to SQLite before being added to the in-memory
+queue. Persistence is handled by `MessageRepository` in
+`src/state/repositories/messages.py`.
+
+**Schema:**
 ```sql
 CREATE TABLE message_queue (
-  id INTEGER PRIMARY KEY,
-  message_id TEXT UNIQUE,
+  message_id TEXT PRIMARY KEY,
   swarm_id TEXT,
   sender_id TEXT,
-  type TEXT,
+  message_type TEXT,
   content TEXT,
   received_at TEXT,
   processed_at TEXT,
-  status TEXT DEFAULT 'pending'
+  status TEXT DEFAULT 'pending',
+  error TEXT
 );
 ```
+
+**Idempotent duplicate handling:** Re-posting a message with the same
+`message_id` is silently ignored via an `IntegrityError` catch. The
+response is always `{"status": "queued"}`.
+
+**Message statuses:** `pending`, `processing`, `completed`, `failed`
+
+**`get_recent()` method:** Retrieves recently completed messages for a swarm,
+ordered by `received_at` descending. The `limit` parameter is capped at 100.
+This is used by the context loader to provide conversation history to the
+Claude subagent.
+
+**Lifecycle:**
+1. Message received at `POST /swarm/message`
+2. Persisted to SQLite via `MessageRepository.enqueue()`
+3. Added to in-memory queue for immediate processing
+4. Wake trigger evaluates the message (if configured)
+5. Status transitions: pending -> processing -> completed/failed
 
 ## 10. Claude Code Integration
 
@@ -637,4 +664,3 @@ Agents MUST include `protocol_version` in all messages. Agents SHOULD accept mes
 - Swarm discovery (public swarm directory)
 - Reputation/trust scoring between agents
 - Multi-master swarms
-- Message persistence and sync across agent instances

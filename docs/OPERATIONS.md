@@ -192,11 +192,20 @@ Joins an existing swarm using an invite token. This is a remote operation.
 | 401 | `INVALID_SIGNATURE` | Request signature invalid |
 | 403 | `APPROVAL_REQUIRED` | Swarm requires approval (pending) |
 | 404 | `SWARM_NOT_FOUND` | Swarm no longer exists |
-| 409 | `ALREADY_MEMBER` | Agent already in swarm |
+| 200 | (idempotent) | Agent already in swarm (returns current membership) |
+
+### Idempotent Behavior
+
+If the joining agent is already a member of the swarm, the endpoint returns
+200 with the current membership data instead of 409. No `member_joined`
+notification is generated for idempotent re-joins. This allows agents to
+re-synchronize their local state without side effects.
 
 ### Side Effects
 
-Master broadcasts `member_joined` notification to all existing members:
+On genuinely new joins, the master persists a `member_joined` notification
+to the message queue. The notification is fire-and-forget and never blocks
+the join response. Master broadcasts `member_joined` notification to all existing members:
 
 ```json
 {
@@ -440,6 +449,6 @@ All error responses follow this structure:
 | `TRANSFER_DECLINED` | 403 | New master declined transfer |
 | `SWARM_NOT_FOUND` | 404 | Swarm does not exist |
 | `MEMBER_NOT_FOUND` | 404 | Target member not in swarm |
-| `ALREADY_MEMBER` | 409 | Agent already in swarm |
+| `ALREADY_MEMBER` | ~~409~~ 200 | Agent already in swarm (idempotent: returns current membership) |
 | `INVALID_SWARM_NAME` | 400 | Swarm name validation failed |
 | `STORAGE_ERROR` | 500 | Persistent storage failure |

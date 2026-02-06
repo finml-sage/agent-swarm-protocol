@@ -104,6 +104,7 @@ Phase 2: Server                    Phase 3: Client                    Phase 4: S
 - `src/state/database.py`
 - `src/state/repositories/membership.py`
 - `src/state/repositories/mutes.py`
+- `src/state/repositories/messages.py` (message persistence and `get_recent()`)
 - `src/state/models/` (data models)
 
 ---
@@ -127,6 +128,9 @@ Phase 2: Server                    Phase 3: Client                    Phase 4: S
 - `src/claude/response_handler.py`
 - `src/claude/session_manager.py`
 - `src/claude/notification_preferences.py`
+- `src/server/notifications.py` (lifecycle event notification service)
+- `src/server/invoker.py` (pluggable agent invocation: subprocess/webhook/noop)
+- `src/server/routes/wake.py` (POST /api/wake endpoint)
 - `docs/CLAUDE-INTEGRATION.md`
 
 ---
@@ -152,6 +156,40 @@ Phase 2: Server                    Phase 3: Client                    Phase 4: S
 - `src/cli/main.py` (was `cli/swarm.py`)
 - `src/cli/commands/` (per-command modules)
 - `docs/CLI.md`
+
+---
+
+## Bug Fix / Integration Phase (PRs #41-75)
+
+After all core phases completed, a series of bug fixes and integration
+improvements were made:
+
+### Documentation Fixes (PRs #41-45)
+- README overhaul: package name, CLI syntax, project structure, developer setup
+- CONTRIBUTING.md: claim workflow for external contributors
+- SERVER-SETUP.md: port and uvicorn module path corrections
+- Docker infrastructure: .dockerignore, rate_limit.conf, Dockerfile COPY, config
+- pyproject.toml: httpx[http2] extra for CLI functionality
+
+### Bug Fixes (PRs #50-63)
+- Client double /swarm/ path construction (#46)
+- .env.example alignment with config.py (#48)
+- Join endpoint: full join logic implementation (#49)
+- docker-compose.yml: DATABASE_PATH vs DB_PATH, named volumes (#54, #55)
+- Client membership persistence after join (#57)
+- Idempotent join: 200 instead of 409 for re-joins (#59)
+- Server logging configuration (#61)
+- Client duplicate member removal (#62)
+
+### Feature Additions (PRs #70-75)
+- Claude Code swarm_protocol SKILL.md (portable, RFC #64)
+- Message persistence to SQLite (#65, PR #71)
+- `get_recent()` for conversation context (#69, PR #72)
+- Server-side wake trigger wiring (#66, PR #73)
+- Lifecycle event notifications: member_joined, member_left, member_kicked,
+  member_muted, member_unmuted (#67, PR #74)
+- POST /api/wake endpoint with pluggable AgentInvoker, X-Wake-Secret auth,
+  and session deduplication (#68, PR #75)
 
 ---
 
@@ -206,4 +244,4 @@ Tasks marked `parallel:yes` can be worked on simultaneously by different agents.
 ### M4: Production Ready
 - Phase 6 complete
 - Documentation complete
-- Test coverage > 80%
+- 269 tests passing across server, client, state, CLI, and Claude integration
