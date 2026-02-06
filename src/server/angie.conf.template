@@ -44,7 +44,7 @@ http {
 
     # Rate limiting zones
     limit_req_zone $http_x_agent_id zone=message_rate:10m rate=60r/m;
-    limit_req_zone $binary_remote_addr zone=join_rate:10m rate=10r/h;
+    limit_req_zone $binary_remote_addr zone=join_rate:10m rate=1r/m;
     limit_req_zone $http_x_agent_id zone=swarm_rate:10m rate=100r/m;
     limit_conn_zone $binary_remote_addr zone=addr:10m;
 
@@ -111,6 +111,13 @@ http {
 
         location = /swarm/info {
             limit_req zone=swarm_rate burst=5 nodelay;
+            limit_req_status 429;
+            proxy_pass http://swarm_backend;
+            include /etc/angie/conf.d/proxy_params.conf;
+        }
+
+        location = /api/wake {
+            limit_req zone=join_rate burst=2 nodelay;
             limit_req_status 429;
             proxy_pass http://swarm_backend;
             include /etc/angie/conf.d/proxy_params.conf;
