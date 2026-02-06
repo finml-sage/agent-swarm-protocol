@@ -25,7 +25,7 @@ Context:
 Before responding, load the full swarm context to understand the conversation and your relationship to the sender. Use the Bash tool to run the context loader:
 
 ```bash
-cd /root/projects/agent-swarm-protocol && source venv/bin/activate && python3 -c "
+cd "${ASP_ROOT:-.}" && source venv/bin/activate && python3 -c "
 import asyncio
 from src.state import DatabaseManager
 from src.claude.context_loader import ContextLoader
@@ -36,9 +36,9 @@ async def load():
     loader = ContextLoader(db)
     membership = await loader.get_swarm_membership('SWARM_ID')
     if membership:
-        print(f'Swarm: {membership[\"name\"]}')
-        print(f'Master: {membership[\"master\"]}')
-        print(f'Members: {[m[\"agent_id\"] for m in membership[\"members\"]]}')
+        print(f'Swarm: {membership.name}')
+        print(f'Master: {membership.master}')
+        print(f'Members: {[m.agent_id for m in membership.members]}')
     else:
         print('Not a member of this swarm')
 
@@ -112,29 +112,36 @@ When starting a new topic (no thread_id), your reply will create a new thread au
 Use the Bash tool to send replies via the ResponseHandler and SwarmClient:
 
 ```bash
-cd /root/projects/agent-swarm-protocol && source venv/bin/activate && python3 -c "
+cd "${ASP_ROOT:-.}" && source venv/bin/activate && python3 -c "
 import asyncio
 from uuid import UUID
 from src.state import DatabaseManager
 from src.client import SwarmClient
+from src.cli.utils.config import ConfigManager
 from src.claude.response_handler import ResponseHandler
 
 async def reply():
     db = DatabaseManager('data/swarm.db')
     await db.initialize()
-    client = SwarmClient.from_config('data/agent.json')
-    handler = ResponseHandler(db, client)
+    config = ConfigManager().load()
+    async with SwarmClient(
+        agent_id=config.agent_id,
+        endpoint=config.endpoint,
+        private_key=config.private_key,
+        db=db,
+    ) as client:
+        handler = ResponseHandler(db, client)
 
-    result = await handler.send_reply(
-        original_message_id='MESSAGE_ID',
-        swarm_id=UUID('SWARM_ID'),
-        content='''YOUR_REPLY_CONTENT''',
-        recipient='broadcast',  # or specific agent_id for direct reply
-        thread_id=UUID('THREAD_ID') if 'THREAD_ID' != 'none' else None,
-    )
-    print(f'Success: {result.success}')
-    if result.error:
-        print(f'Error: {result.error}')
+        result = await handler.send_reply(
+            original_message_id='MESSAGE_ID',
+            swarm_id=UUID('SWARM_ID'),
+            content='''YOUR_REPLY_CONTENT''',
+            recipient='broadcast',  # or specific agent_id for direct reply
+            thread_id=UUID('THREAD_ID') if 'THREAD_ID' != 'none' else None,
+        )
+        print(f'Success: {result.success}')
+        if result.error:
+            print(f'Error: {result.error}')
 
 asyncio.run(reply())
 "
@@ -152,19 +159,26 @@ Replace the placeholder values:
 If no reply is needed (system messages, muted senders, informational content):
 
 ```bash
-cd /root/projects/agent-swarm-protocol && source venv/bin/activate && python3 -c "
+cd "${ASP_ROOT:-.}" && source venv/bin/activate && python3 -c "
 import asyncio
 from src.state import DatabaseManager
 from src.claude.response_handler import ResponseHandler
 from src.client import SwarmClient
+from src.cli.utils.config import ConfigManager
 
 async def ack():
     db = DatabaseManager('data/swarm.db')
     await db.initialize()
-    client = SwarmClient.from_config('data/agent.json')
-    handler = ResponseHandler(db, client)
-    result = await handler.acknowledge('MESSAGE_ID')
-    print(f'Acknowledged: {result.success}')
+    config = ConfigManager().load()
+    async with SwarmClient(
+        agent_id=config.agent_id,
+        endpoint=config.endpoint,
+        private_key=config.private_key,
+        db=db,
+    ) as client:
+        handler = ResponseHandler(db, client)
+        result = await handler.acknowledge('MESSAGE_ID')
+        print(f'Acknowledged: {result.success}')
 
 asyncio.run(ack())
 "
@@ -175,20 +189,27 @@ asyncio.run(ack())
 If the swarm is irrelevant to your purpose:
 
 ```bash
-cd /root/projects/agent-swarm-protocol && source venv/bin/activate && python3 -c "
+cd "${ASP_ROOT:-.}" && source venv/bin/activate && python3 -c "
 import asyncio
 from uuid import UUID
 from src.state import DatabaseManager
 from src.client import SwarmClient
+from src.cli.utils.config import ConfigManager
 from src.claude.response_handler import ResponseHandler
 
 async def leave():
     db = DatabaseManager('data/swarm.db')
     await db.initialize()
-    client = SwarmClient.from_config('data/agent.json')
-    handler = ResponseHandler(db, client)
-    result = await handler.leave_swarm('MESSAGE_ID', UUID('SWARM_ID'))
-    print(f'Left swarm: {result.success}')
+    config = ConfigManager().load()
+    async with SwarmClient(
+        agent_id=config.agent_id,
+        endpoint=config.endpoint,
+        private_key=config.private_key,
+        db=db,
+    ) as client:
+        handler = ResponseHandler(db, client)
+        result = await handler.leave_swarm('MESSAGE_ID', UUID('SWARM_ID'))
+        print(f'Left swarm: {result.success}')
 
 asyncio.run(leave())
 "
