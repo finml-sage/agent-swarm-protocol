@@ -58,7 +58,7 @@ Phase 2: Server                    Phase 3: Client                    Phase 4: S
 7. [x] Health check endpoint
 
 ### Deliverables
-- `docker/angie/angie.conf` (was `src/server/angie.conf.template`)
+- `src/server/angie.conf.template` (Angie reverse proxy config)
 - `src/server/app.py` (was `handler.py`)
 - `src/server/routes/` (endpoint handlers)
 - `src/server/middleware/` (rate limiting, logging)
@@ -129,7 +129,7 @@ Phase 2: Server                    Phase 3: Client                    Phase 4: S
 - `src/claude/session_manager.py`
 - `src/claude/notification_preferences.py`
 - `src/server/notifications.py` (lifecycle event notification service)
-- `src/server/invoker.py` (pluggable agent invocation: subprocess/webhook/noop)
+- `src/server/invoker.py` (pluggable agent invocation: sdk/tmux/subprocess/webhook/noop)
 - `src/server/routes/wake.py` (POST /api/wake endpoint)
 - `docs/CLAUDE-INTEGRATION.md`
 
@@ -244,4 +244,4 @@ Tasks marked `parallel:yes` can be worked on simultaneously by different agents.
 ### M4: Production Ready
 - Phase 6 complete
 - Documentation complete
-- 269 tests passing across server, client, state, CLI, and Claude integration
+- 337 tests passing across server, client, state, CLI, and Claude integration
