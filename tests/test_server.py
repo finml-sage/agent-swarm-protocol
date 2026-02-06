@@ -300,22 +300,6 @@ class TestHealthEndpoint:
         assert response.status_code == 200
         assert response.json()["status"] == "healthy"
 
-    def test_returns_degraded_when_queue_full(self, agent_config: AgentConfig, standard_headers: dict, tmp_path: Path) -> None:
-        config = ServerConfig(
-            agent=agent_config, rate_limit=RateLimitConfig(messages_per_minute=100),
-            queue_max_size=10, db_path=tmp_path / "health.db",
-            wake=_NO_WAKE, wake_endpoint=_NO_WAKE_EP,
-        )
-        with TestClient(create_app(config)) as c:
-            for i in range(9):
-                msg = {"protocol_version": "0.1.0", "message_id": f"550e8400-e29b-41d4-a716-44665544000{i}",
-                       "timestamp": "2026-02-05T14:30:00.000Z", "sender": {"agent_id": "s", "endpoint": "https://s.com"},
-                       "recipient": "t", "swarm_id": "660e8400-e29b-41d4-a716-446655440001", "type": "message",
-                       "content": f"M{i}", "signature": "s"}
-                c.post("/swarm/message", json=msg, headers=standard_headers)
-            response = c.get("/swarm/health", headers=standard_headers)
-        assert response.json()["status"] == "degraded"
-
 
 class TestInfoEndpoint:
     def test_returns_agent_info(self, client: TestClient, standard_headers: dict) -> None:
@@ -328,7 +312,7 @@ class TestRateLimitMiddleware:
     def test_returns_429_when_limit_exceeded(self, agent_config: AgentConfig, valid_message: dict, standard_headers: dict, tmp_path: Path) -> None:
         config = ServerConfig(
             agent=agent_config, rate_limit=RateLimitConfig(messages_per_minute=3),
-            queue_max_size=100, db_path=tmp_path / "ratelimit.db",
+            db_path=tmp_path / "ratelimit.db",
             wake=_NO_WAKE, wake_endpoint=_NO_WAKE_EP,
         )
         with TestClient(create_app(config)) as c:

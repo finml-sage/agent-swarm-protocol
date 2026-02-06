@@ -7,7 +7,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 logger = logging.getLogger("swarm.server")
-SENSITIVE_FIELDS = frozenset({"signature", "public_key", "invite_token", "authorization", "x-api-key"})
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
@@ -27,17 +26,3 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         duration_ms = (time.perf_counter() - start_time) * 1000
         logger.info("Response: %s %s status=%d duration=%.2fms", request.method, request.url.path, response.status_code, duration_ms)
         return response
-
-
-def sanitize_dict(data: dict) -> dict:
-    """Remove sensitive fields from a dictionary for logging."""
-    result = {}
-    for key, value in data.items():
-        lower_key = key.lower()
-        if lower_key in SENSITIVE_FIELDS:
-            result[key] = "[REDACTED]"
-        elif isinstance(value, dict):
-            result[key] = sanitize_dict(value)
-        else:
-            result[key] = value
-    return result

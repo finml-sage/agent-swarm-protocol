@@ -26,7 +26,6 @@ class AgentConfig:
 @dataclass(frozen=True)
 class RateLimitConfig:
     messages_per_minute: int = 60
-    join_requests_per_hour: int = 10
 
 
 @dataclass(frozen=True)
@@ -80,7 +79,6 @@ class WakeEndpointConfig:
 class ServerConfig:
     agent: AgentConfig
     rate_limit: RateLimitConfig = field(default_factory=RateLimitConfig)
-    queue_max_size: int = 10000
     db_path: Path = field(default_factory=lambda: Path("data/swarm.db"))
     wake: WakeConfig = field(default_factory=WakeConfig)
     wake_endpoint: WakeEndpointConfig = field(default_factory=WakeEndpointConfig)
@@ -169,9 +167,7 @@ def load_config_from_env() -> ServerConfig:
         ),
         rate_limit=RateLimitConfig(
             messages_per_minute=int(os.environ.get("RATE_LIMIT_MESSAGES_PER_MINUTE", "60")),
-            join_requests_per_hour=int(os.environ.get("RATE_LIMIT_JOIN_PER_HOUR", "10")),
         ),
-        queue_max_size=int(os.environ.get("QUEUE_MAX_SIZE", "10000")),
         db_path=Path(os.environ.get("DB_PATH", "data/swarm.db")),
         wake=WakeConfig(
             enabled=wake_enabled,

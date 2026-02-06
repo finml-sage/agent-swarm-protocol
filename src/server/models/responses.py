@@ -4,11 +4,6 @@ from pydantic import BaseModel, Field
 from src.server.models.common import Member
 
 
-class MessageResponse(BaseModel):
-    status: Literal["received"] = "received"
-    message_id: Annotated[str, Field()]
-
-
 class MessageQueuedResponse(BaseModel):
     status: Literal["queued"] = "queued"
     message_id: Annotated[str, Field()]

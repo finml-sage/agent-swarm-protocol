@@ -2,7 +2,6 @@
 from src.server.models.common import Sender, JoinSender, Member
 from src.server.models.requests import MessageRequest, JoinRequest
 from src.server.models.responses import (
-    MessageResponse,
     MessageQueuedResponse,
     JoinAcceptedResponse,
     JoinPendingResponse,
@@ -18,7 +17,6 @@ __all__ = [
     "Member",
     "MessageRequest",
     "JoinRequest",
-    "MessageResponse",
     "MessageQueuedResponse",
     "JoinAcceptedResponse",
     "JoinPendingResponse",

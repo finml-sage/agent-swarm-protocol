@@ -39,8 +39,8 @@ def agent_config() -> AgentConfig:
 @pytest.fixture
 def server_config(agent_config: AgentConfig, tmp_path: Path) -> ServerConfig:
     return ServerConfig(
-        agent=agent_config, rate_limit=RateLimitConfig(messages_per_minute=60, join_requests_per_hour=10),
-        queue_max_size=100, db_path=tmp_path / "test.db",
+        agent=agent_config, rate_limit=RateLimitConfig(messages_per_minute=60),
+        db_path=tmp_path / "test.db",
         wake=WakeConfig(enabled=False, endpoint=""),
         wake_endpoint=WakeEndpointConfig(enabled=False),
     )
