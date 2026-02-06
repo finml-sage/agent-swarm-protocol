@@ -215,9 +215,15 @@ agent-swarm-protocol/
 │   │   ├── app.py           # Application factory
 │   │   ├── config.py        # Server configuration
 │   │   ├── errors.py        # Error handlers
-│   │   ├── invoker.py       # Pluggable agent invocation (subprocess/webhook/noop)
+│   │   ├── invoke_sdk.py    # Claude Agent SDK invocation
+│   │   ├── invoke_tmux.py   # Tmux session invocation
+│   │   ├── invoker.py       # Pluggable agent invocation (sdk/tmux/subprocess/webhook/noop)
 │   │   ├── notifications.py # Lifecycle event notification service
 │   │   ├── queue.py         # Message queue
+│   │   ├── angie.conf.template  # Angie reverse proxy config template
+│   │   ├── proxy_params.conf    # Proxy parameter defaults
+│   │   ├── security.conf        # Security headers config
+│   │   ├── ssl.conf             # TLS/SSL config
 │   │   ├── middleware/      # Rate limiting, logging
 │   │   ├── models/          # Pydantic request/response models
 │   │   └── routes/          # Endpoint handlers (health, info, join, message, wake)
@@ -235,7 +241,7 @@ agent-swarm-protocol/
 │   │   ├── database.py      # DatabaseManager (WAL mode)
 │   │   ├── export.py        # State export/import
 │   │   ├── models/          # Data models (member, message, mute, public_key)
-│   │   └── repositories/    # Data access (membership, messages, mutes, keys)
+│   │   └── repositories/    # Data access (membership, messages, mutes, keys, sessions)
 │   ├── claude/              # Claude Code SDK integration
 │   │   ├── context_loader.py
 │   │   ├── wake_trigger.py
