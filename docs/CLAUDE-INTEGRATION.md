@@ -5,49 +5,78 @@ This document describes how Claude Code integrates with the Agent Swarm Protocol
 ## Architecture Overview
 
 ```
-                    +-------------------+
-                    |   Wake Daemon     |
-                    | (polls for msgs)  |
-                    +--------+----------+
-                             |
-                             | POST /api/wake
-                             v
-+----------------+    +--------------+    +------------------+
-| Message Queue  |--->| Wake Trigger |--->| Context Loader   |
-| (state DB)     |    |              |    | (loads context)  |
-+----------------+    +--------------+    +--------+---------+
-                                                   |
-                                                   v
-                    +-------------------+    +--------------+
-                    | Response Handler  |<---| Claude       |
-                    | (sends via client)|    | Subagent     |
-                    +---------+---------+    +--------------+
-                              |
+                         FastAPI Server
+    ┌────────────────────────────────────────────────┐
+    │                                                │
+    │  POST /swarm/message                           │
+    │       │                                        │
+    │       v                                        │
+    │  ┌────────────────┐    ┌────────────────────┐  │
+    │  │ MessageRepo    │    │ WakeTrigger        │  │
+    │  │ (SQLite)       │───>│ (evaluates prefs)  │  │
+    │  └────────────────┘    └────────┬───────────┘  │
+    │                                 │              │
+    │                       POST /api/wake           │
+    │                                 │              │
+    │                                 v              │
+    │                        ┌────────────────────┐  │
+    │                        │ Wake Endpoint      │  │
+    │                        │ (session dedup)    │  │
+    │                        └────────┬───────────┘  │
+    │                                 │              │
+    │                                 v              │
+    │                        ┌────────────────────┐  │
+    │                        │ AgentInvoker       │  │
+    │                        │ (subprocess/       │  │
+    │                        │  webhook/noop)     │  │
+    │                        └────────────────────┘  │
+    └────────────────────────────────────────────────┘
+                              │
                               v
-                    +-------------------+
-                    |   Swarm Client    |
-                    | (broadcasts msg)  |
-                    +-------------------+
+                    ┌───────────────────┐
+                    │ Claude Subagent   │
+                    │ (Context Loader + │
+                    │  Response Handler)│
+                    └───────────────────┘
 ```
+
+The wake trigger runs **inside the FastAPI server**, not as an external daemon.
+When a message arrives at `POST /swarm/message`, the server:
+
+1. Persists the message to SQLite via `MessageRepository`
+2. Adds the message to the in-memory queue
+3. Evaluates the message via `WakeTrigger` (if `WAKE_ENABLED=true`)
+4. If the decision is WAKE, POSTs to `/api/wake` (which may be on the same server)
+5. The wake endpoint invokes the agent via the configured `AgentInvoker`
 
 ## Components
 
-### Wake Trigger (`wake_trigger.py`)
+### Wake Trigger (`src/claude/wake_trigger.py`)
 
-The wake trigger determines when to activate the Claude subagent.
+The wake trigger is wired into the message route at server startup. It
+evaluates each incoming message against notification preferences and decides
+whether to wake the Claude subagent.
 
-**Responsibilities:**
-- Evaluate incoming messages against notification preferences
-- Decide: wake immediately, queue silently, or skip
-- POST to wake daemon endpoint when immediate processing needed
-- Notify registered callbacks of wake events
+**Wiring (in `src/server/app.py`):**
+
+When `WAKE_ENABLED=true`, `create_app()` builds a `WakeTrigger` instance
+and stores it on `app.state.wake_trigger`. The message route handler checks
+for this attribute after persisting each message.
+
+**Configuration:**
+
+| Env Var | Default | Description |
+|---------|---------|-------------|
+| `WAKE_ENABLED` | `false` | Enable the wake trigger |
+| `WAKE_ENDPOINT` | (required when enabled) | URL to POST wake notifications |
+| `WAKE_TIMEOUT` | `5.0` | HTTP timeout for wake POST (seconds) |
 
 **Usage:**
 ```python
 from src.claude import WakeTrigger, NotificationPreferences
 from src.state import DatabaseManager
 
-db = DatabaseManager(Path("./swarm.db"))
+db = DatabaseManager(Path("./data/swarm.db"))
 await db.initialize()
 
 prefs = NotificationPreferences(
@@ -67,13 +96,66 @@ if event.decision == WakeDecision.WAKE:
     print(f"Woke Claude for message {event.message.message_id}")
 ```
 
-### Context Loader (`context_loader.py`)
+### Wake Endpoint (`src/server/routes/wake.py`)
+
+The `/api/wake` endpoint receives wake trigger POSTs and invokes the agent.
+It is conditionally mounted when `WAKE_EP_ENABLED=true`.
+
+**Request format:**
+```json
+{
+    "message_id": "uuid",
+    "swarm_id": "uuid",
+    "sender_id": "agent-name",
+    "notification_level": "normal"
+}
+```
+
+**Response statuses:**
+- `invoked` -- agent was not active; invocation started
+- `already_active` -- agent session is running; skipped
+- `error` -- invocation failed
+
+**Authentication:**
+
+When `WAKE_EP_SECRET` is set (non-empty), the endpoint requires an
+`X-Wake-Secret` header matching the configured value. Requests without a
+valid secret receive 403 Forbidden. When `WAKE_EP_SECRET` is empty,
+authentication is disabled.
+
+**Session deduplication:**
+
+The endpoint uses `SessionManager` to track active agent sessions. If a
+session is active and within the timeout window (`WAKE_EP_SESSION_TIMEOUT`
+minutes), the request returns `already_active` without re-invoking.
+
+See [endpoint-wake.md](api/endpoint-wake.md) for the complete API reference.
+
+### AgentInvoker (`src/server/invoker.py`)
+
+Pluggable agent invocation strategy. The method is configured via
+`WAKE_EP_INVOKE_METHOD`.
+
+| Method | Description | `WAKE_EP_INVOKE_TARGET` |
+|--------|-------------|-------------------------|
+| `subprocess` | Launch a shell command | Command template with `{message_id}`, `{swarm_id}`, etc. |
+| `webhook` | POST to a URL | Webhook URL |
+| `noop` | Do nothing (testing) | Not required |
+
+**Subprocess invocation** is fire-and-forget: the endpoint returns
+immediately after starting the process. The command template supports Python
+format string placeholders from the wake payload.
+
+**Webhook invocation** POSTs the wake payload as JSON. Returns an error
+if the webhook responds with HTTP 400+.
+
+### Context Loader (`src/claude/context_loader.py`)
 
 Loads full context from state for Claude to make informed decisions.
 
 **Responsibilities:**
 - Load swarm membership information
-- Fetch recent message history
+- Fetch recent message history (via `MessageRepository.get_recent()`, capped at 100)
 - Check mute status for sender and swarm
 - Count pending messages
 
@@ -89,7 +171,7 @@ print(f"Sender muted: {context.is_sender_muted}")
 print(f"Pending messages: {context.pending_count}")
 ```
 
-### Response Handler (`response_handler.py`)
+### Response Handler (`src/claude/response_handler.py`)
 
 Executes Claude's decisions by sending messages via the SwarmClient.
 
@@ -124,7 +206,7 @@ result = await handler.send_reply(
 result = await handler.acknowledge(context.message.message_id)
 ```
 
-### Notification Preferences (`notification_preferences.py`)
+### Notification Preferences (`src/claude/notification_preferences.py`)
 
 Configures when the agent should be woken vs messages queued silently.
 
@@ -134,7 +216,7 @@ Configures when the agent should be woken vs messages queued silently.
 - `HIGH_PRIORITY` - Wake on high priority messages
 - `FROM_SPECIFIC_AGENT` - Wake for watched agents
 - `KEYWORD_MATCH` - Wake on keyword matches
-- `SWARM_SYSTEM_MESSAGE` - Wake on system events
+- `SWARM_SYSTEM_MESSAGE` - Wake on system events (join/leave/kick/mute/unmute)
 
 **Example Configuration:**
 ```python
@@ -152,7 +234,7 @@ prefs = NotificationPreferences(
 )
 ```
 
-### Session Manager (`session_manager.py`)
+### Session Manager (`src/claude/session_manager.py`)
 
 Tracks session state for resume vs new session decisions.
 
@@ -167,7 +249,7 @@ from src.claude import SessionManager
 from pathlib import Path
 
 session = SessionManager(
-    session_file=Path("./claude_session.json"),
+    session_file=Path("./data/session.json"),
     session_timeout_minutes=30,
 )
 
@@ -191,82 +273,47 @@ session.suspend_session(
 )
 ```
 
-## Integration with Wake Daemon
-
-The wake trigger integrates with an external wake daemon that polls for pending messages and triggers Claude activation.
-
-### Wake Endpoint
-
-The daemon should expose `POST /api/wake` accepting:
-```json
-{
-    "message_id": "uuid",
-    "swarm_id": "uuid",
-    "sender_id": "agent-name",
-    "notification_level": "normal|urgent|silent"
-}
-```
-
-### Daemon Responsibilities
-
-1. Poll message queue for pending messages
-2. For each pending message, call `WakeTrigger.process_message()`
-3. If decision is WAKE, the trigger automatically POSTs to wake endpoint
-4. Daemon receives POST and activates Claude with context
-
-### Example Daemon Loop
-
-```python
-async def daemon_loop(trigger: WakeTrigger, db: DatabaseManager):
-    while True:
-        async with db.connection() as conn:
-            repo = MessageRepository(conn)
-            for swarm in get_active_swarms():
-                msg = await repo.claim_next(swarm.swarm_id)
-                if msg:
-                    await trigger.process_message(msg)
-        await asyncio.sleep(5)  # Poll interval
-```
-
-## Complete Workflow Example
+## Complete Workflow
 
 ### 1. Message Arrives
 
-Server receives message, adds to queue:
+Server receives message at `POST /swarm/message`:
 ```python
-queued = QueuedMessage(
-    message_id=str(uuid4()),
-    swarm_id=message.swarm_id,
-    sender_id=message.sender.agent_id,
-    message_type=message.type.value,
-    content=message.content,
-    received_at=datetime.now(timezone.utc),
-)
-await message_repo.enqueue(queued)
+# Message is persisted to SQLite (idempotent on message_id)
+async with db.connection() as conn:
+    repo = MessageRepository(conn)
+    await repo.enqueue(message)
+
+# Added to in-memory queue
+await queue.put(body)
 ```
 
-### 2. Wake Daemon Polls
+### 2. Wake Trigger Evaluates
 
-Daemon claims message and evaluates:
+The message route evaluates the wake trigger inline (not via external polling):
 ```python
-msg = await repo.claim_next(swarm_id)
-event = await trigger.process_message(msg)
+wake_trigger = getattr(request.app.state, "wake_trigger", None)
+if wake_trigger is not None:
+    event = await wake_trigger.process_message(message)
+    # event.decision is WAKE, QUEUE, or SKIP
 ```
 
-### 3. Claude Activated
+### 3. Wake Endpoint Invoked
 
-If `event.decision == WakeDecision.WAKE`, Claude receives context:
+If `event.decision == WakeDecision.WAKE`, the trigger POSTs to the
+configured `WAKE_ENDPOINT`. The wake endpoint checks for an active
+session and invokes the agent if none is running.
+
+### 4. Claude Activated
+
+The `AgentInvoker` starts the Claude subagent using the configured method.
+The subagent receives the wake payload and loads context:
 ```python
-context = event.context
-
-# Claude decides based on:
-# - context.message (the incoming message)
-# - context.swarm (membership info)
-# - context.is_sender_muted
-# - context.pending_count
+context = await loader.load_context(queued_message, recent_limit=10)
+# context.message, context.swarm, context.is_sender_muted, context.pending_count
 ```
 
-### 4. Claude Responds
+### 5. Claude Responds
 
 Claude executes action via handler:
 ```python
@@ -280,7 +327,7 @@ else:
     await handler.acknowledge(context.message.message_id)
 ```
 
-### 5. Session Updated
+### 6. Session Updated
 
 Session state persisted for continuity:
 ```python
@@ -289,6 +336,33 @@ session.update_activity(
     context_summary="Answered question about invite tokens",
 )
 ```
+
+## Environment Variables
+
+### Wake Trigger (WakeConfig)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `WAKE_ENABLED` | `false` | Enable server-side wake trigger |
+| `WAKE_ENDPOINT` | (required when enabled) | URL to POST wake notifications |
+| `WAKE_TIMEOUT` | `5.0` | HTTP timeout for wake POST (seconds) |
+
+### Wake Endpoint (WakeEndpointConfig)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `WAKE_EP_ENABLED` | `false` | Mount POST /api/wake endpoint |
+| `WAKE_EP_INVOKE_METHOD` | `noop` | Invocation method: subprocess, webhook, noop |
+| `WAKE_EP_INVOKE_TARGET` | (empty) | Command template or webhook URL |
+| `WAKE_EP_SECRET` | (empty) | Shared secret for X-Wake-Secret auth |
+| `WAKE_EP_SESSION_FILE` | `data/session.json` | Session state file path |
+| `WAKE_EP_SESSION_TIMEOUT` | `30` | Session expiry (minutes) |
+
+### Database
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DB_PATH` | `data/swarm.db` | SQLite database for message persistence |
 
 ## Error Handling
 
@@ -299,33 +373,9 @@ All components follow fail-loudly principles:
 - **ResponseHandlerError**: Database not initialized
 - **SessionManagerError**: No active session or corrupted session file
 
-Errors propagate to allow proper handling at the daemon level.
-
-## Configuration
-
-### Environment Variables
-
-```bash
-SWARM_DB_PATH=/path/to/swarm.db
-WAKE_ENDPOINT=http://localhost:8080/api/wake
-WAKE_TIMEOUT=5.0
-SESSION_FILE=/path/to/session.json
-SESSION_TIMEOUT_MINUTES=30
-```
-
-### Notification Preferences File
-
-```json
-{
-    "enabled": true,
-    "default_level": "normal",
-    "wake_conditions": ["direct_mention", "high_priority"],
-    "watched_agents": ["important-agent"],
-    "watched_keywords": ["urgent", "help"],
-    "muted_swarms": [],
-    "quiet_hours": [22, 6]
-}
-```
+Wake trigger errors in the message route are logged but never block message
+acceptance. The message is always persisted and queued regardless of wake
+trigger outcome.
 
 ## Testing
 
