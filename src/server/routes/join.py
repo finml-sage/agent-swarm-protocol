@@ -14,6 +14,7 @@ from src.server.models.responses import (
     JoinAcceptedResponse,
     JoinPendingResponse,
 )
+from src.server.notifications import notify_member_joined
 from src.server.routes._join_helpers import extract_swarm_id, find_master_public_key
 from src.state.database import DatabaseManager
 from src.state.join import (
@@ -44,6 +45,9 @@ def create_join_router(config: ServerConfig, db: DatabaseManager) -> APIRouter:
 
         Idempotent: if the agent is already a member, returns 200 with
         current membership data instead of 409.
+
+        On a genuinely new join, a member_joined system notification is
+        persisted to the message queue (fire-and-forget).
         """
         try:
             swarm_id = extract_swarm_id(body.invite_token)
@@ -53,6 +57,9 @@ def create_join_router(config: ServerConfig, db: DatabaseManager) -> APIRouter:
         try:
             async with db.connection() as conn:
                 swarm = await lookup_swarm(conn, swarm_id)
+                was_member = any(
+                    m.agent_id == body.sender.agent_id for m in swarm.members
+                )
                 master_key = find_master_public_key(swarm.members, swarm.master)
                 result = await validate_and_join(
                     conn=conn,
@@ -78,11 +85,28 @@ def create_join_router(config: ServerConfig, db: DatabaseManager) -> APIRouter:
                 ).model_dump(),
             )
 
+        # Fire-and-forget: persist notification only for genuinely new joins
+        if not was_member:
+            try:
+                await notify_member_joined(
+                    db,
+                    swarm_id=result.swarm_id,
+                    agent_id=body.sender.agent_id,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Failed to persist join notification for '%s': %s",
+                    body.sender.agent_id,
+                    exc,
+                )
+
         members = [
             Member(agent_id=m.agent_id, endpoint=m.endpoint, public_key=m.public_key)
             for m in result.members
         ]
-        logger.info("Agent '%s' joined swarm '%s'", body.sender.agent_id, result.swarm_id)
+        logger.info(
+            "Agent '%s' joined swarm '%s'", body.sender.agent_id, result.swarm_id,
+        )
         return JoinAcceptedResponse(
             status="accepted",
             swarm_id=result.swarm_id,
