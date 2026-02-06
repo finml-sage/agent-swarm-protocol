@@ -120,6 +120,8 @@ def create_app(config: Optional[ServerConfig] = None) -> FastAPI:
                 session_manager=session_mgr,
                 invoker=invoker,
                 wake_secret=config.wake_endpoint.secret,
+                db_manager=db_manager,
+                session_timeout_minutes=config.wake_endpoint.session_timeout_minutes,
             )
         )
         logger.info(

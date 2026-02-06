@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field
 
 from src.claude.session_manager import SessionManager, SessionState
 from src.server.invoker import AgentInvoker
+from src.state.database import DatabaseManager
+from src.state.session_service import lookup_sdk_session, persist_sdk_session
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +37,8 @@ def create_wake_router(
     session_manager: SessionManager,
     invoker: AgentInvoker,
     wake_secret: str = "",
+    db_manager: Optional[DatabaseManager] = None,
+    session_timeout_minutes: int = 30,
 ) -> APIRouter:
     """Create the /api/wake router with injected dependencies.
 
@@ -42,6 +46,8 @@ def create_wake_router(
         session_manager: Tracks whether an agent session is active.
         invoker: Pluggable agent invocation strategy.
         wake_secret: Shared secret for auth. Empty string disables auth.
+        db_manager: Database manager for SDK session persistence.
+        session_timeout_minutes: Idle timeout before starting fresh session.
     """
     router = APIRouter()
 
@@ -58,12 +64,11 @@ def create_wake_router(
     ) -> WakeResponse | JSONResponse:
         """Invoke the agent in response to a wake trigger.
 
-        Returns:
-            - ``invoked``: agent was not active; invocation started.
-            - ``already_active``: agent session is already running.
-            - ``error``: invocation failed.
+        Looks up previous SDK session for the swarm/sender pair and
+        passes it as ``resume`` to continue the conversation. Persists
+        the new session_id after invocation.
         """
-        # Auth check: if a secret is configured, require it
+        # Auth check
         if wake_secret and x_wake_secret != wake_secret:
             return JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -77,15 +82,23 @@ def create_wake_router(
         if session is not None and session.state == SessionState.ACTIVE:
             if session_manager.should_resume():
                 logger.info(
-                    "Agent already active (session=%s), skipping invocation",
+                    "Agent already active (session=%s), skipping",
                     session.session_id,
                 )
                 return WakeResponse(status="already_active")
 
+        # Look up previous SDK session for conversation continuity
+        resume_id: Optional[str] = None
+        if db_manager is not None:
+            resume_id = await lookup_sdk_session(
+                db_manager, body.swarm_id, body.sender_id,
+                session_timeout_minutes,
+            )
+
         # Invoke the agent
         payload = body.model_dump()
         try:
-            await invoker.invoke(payload)
+            new_session_id = await invoker.invoke(payload, resume=resume_id)
         except Exception as exc:
             logger.error("Agent invocation failed: %s", exc)
             return JSONResponse(
@@ -95,10 +108,15 @@ def create_wake_router(
                 ).model_dump(),
             )
 
+        # Persist new SDK session_id for future continuity
+        if db_manager is not None and new_session_id is not None:
+            await persist_sdk_session(
+                db_manager, body.swarm_id, body.sender_id, new_session_id,
+            )
+
         logger.info(
-            "Agent invoked for message=%s swarm=%s",
-            body.message_id,
-            body.swarm_id,
+            "Agent invoked for message=%s swarm=%s session=%s",
+            body.message_id, body.swarm_id, new_session_id,
         )
         return WakeResponse(status="invoked")
 

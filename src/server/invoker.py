@@ -44,8 +44,14 @@ class AgentInvoker:
     def method(self) -> str:
         return self._method
 
-    async def invoke(self, payload: dict) -> Optional[str]:
+    async def invoke(
+        self, payload: dict, resume: Optional[str] = None
+    ) -> Optional[str]:
         """Invoke the agent with the given wake payload.
+
+        Args:
+            payload: The wake payload with message metadata.
+            resume: Previous SDK session_id to continue, or None.
 
         Returns:
             The SDK session_id when method is 'sdk', None otherwise.
@@ -62,7 +68,7 @@ class AgentInvoker:
         if self._method == "sdk":
             from src.server.invoke_sdk import invoke_sdk
 
-            return await invoke_sdk(payload, self._sdk_config)
+            return await invoke_sdk(payload, self._sdk_config, resume=resume)
         return None
 
     async def _invoke_subprocess(self, payload: dict) -> None:
