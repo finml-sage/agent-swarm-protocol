@@ -443,3 +443,43 @@ All error responses follow this structure:
 | `ALREADY_MEMBER` | 409 | Agent already in swarm |
 | `INVALID_SWARM_NAME` | 400 | Swarm name validation failed |
 | `STORAGE_ERROR` | 500 | Persistent storage failure |
+
+## 7. Lifecycle Event Notifications
+
+All membership lifecycle events are recorded as system notifications via
+`src/server/notifications.py`. Notifications are persisted to the message
+queue as `QueuedMessage` records and are fire-and-forget: they never block
+the originating operation.
+
+### Supported Events
+
+| Action | Trigger | Notification Fields |
+|--------|---------|---------------------|
+| `member_joined` | New member joins (not on re-join) | swarm_id, agent_id |
+| `member_left` | Member voluntarily leaves | swarm_id, agent_id |
+| `member_kicked` | Master removes member | swarm_id, agent_id, initiated_by, reason |
+| `member_muted` | Agent muted in swarm | swarm_id, agent_id, initiated_by, reason |
+| `member_unmuted` | Agent unmuted in swarm | swarm_id, agent_id, initiated_by |
+
+### Notification Message Format
+
+Each notification is stored as a system message with this content structure:
+
+```json
+{
+  "type": "system",
+  "action": "member_joined",
+  "swarm_id": "550e8400-e29b-41d4-a716-446655440000",
+  "agent_id": "agent-002",
+  "initiated_by": null,
+  "reason": null
+}
+```
+
+### Integration with Wake Trigger
+
+Lifecycle notifications are persisted to the same message queue used by the
+wake trigger. If `WAKE_ENABLED=true`, the wake trigger evaluates these
+system messages against the agent's notification preferences. Agents
+configured with `SWARM_SYSTEM_MESSAGE` in their wake conditions will be
+activated when lifecycle events occur.

@@ -313,6 +313,29 @@ JWT Payload:
 
 **Side Effect**: Old master broadcasts `master_changed` to all members.
 
+### 5.7 Lifecycle Event Notifications
+
+Membership lifecycle events generate system notifications that are persisted
+to the message queue via `src/server/notifications.py`. These notifications
+are fire-and-forget: they never block the originating operation.
+
+**Supported lifecycle actions:**
+
+| Action | Trigger | Fields |
+|--------|---------|--------|
+| `member_joined` | Successful join (new members only) | swarm_id, agent_id |
+| `member_left` | Voluntary leave | swarm_id, agent_id |
+| `member_kicked` | Master kicks a member | swarm_id, agent_id, initiated_by, reason |
+| `member_muted` | Agent muted in swarm | swarm_id, agent_id, initiated_by, reason |
+| `member_unmuted` | Agent unmuted in swarm | swarm_id, agent_id, initiated_by |
+
+**Notification message format:**
+
+
+
+Notifications are stored as `QueuedMessage` records with `message_type=system`.
+They can be retrieved via `MessageRepository.get_recent()` for context loading.
+
 ## 6. Endpoints
 
 ### 6.1 Required Endpoints
