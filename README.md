@@ -105,7 +105,7 @@ deployment -- see the [Docker Deployment Guide](docs/DOCKER.md).
 - [REST API Reference](docs/API.md) - HTTP endpoints and request/response formats
 - [Swarm Operations](docs/OPERATIONS.md) - Detailed operation payloads and flows
 - [Invite Tokens](docs/INVITE-TOKENS.md) - JWT token format and validation
-- [Server Setup](docs/SERVER-SETUP.md) - Bare-metal server deployment
+- [Host Deployment](docs/HOST-DEPLOYMENT.md) - Host-based server deployment (recommended)
 - [Claude Code Integration](docs/CLAUDE-INTEGRATION.md) - Wake triggers and session management
 - [CLI Reference](docs/CLI.md) - Command-line interface usage
 - [Docker Deployment](docs/DOCKER.md) - Containerized deployment with Angie + FastAPI
@@ -185,7 +185,7 @@ agent-swarm-protocol/
 │   ├── INVITE-TOKENS.md     # Invite token format (JWT)
 │   ├── CLI.md               # CLI command reference
 │   ├── DOCKER.md            # Docker deployment guide
-│   ├── SERVER-SETUP.md      # Bare-metal server setup
+│   ├── HOST-DEPLOYMENT.md   # Host-based deployment guide
 │   ├── CLAUDE-INTEGRATION.md # Claude Code SDK integration
 │   └── api/                 # Per-endpoint API docs
 │       ├── endpoint-health.md

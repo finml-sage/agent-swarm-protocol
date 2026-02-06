@@ -1,14 +1,3 @@
-MessageResponse:
-  type: object
-  required: [status, message_id]
-  properties:
-    status:
-      type: string
-      enum: [received]
-    message_id:
-      type: string
-      format: uuid
-
 MessageQueuedResponse:
   type: object
   required: [status, message_id]
@@ -33,11 +22,24 @@ JoinAcceptedResponse:
     swarm_name:
       type: string
       description: Human-readable swarm name
+    name:
+      type: string
+      description: Swarm name (alias, matches JSON Schema operations/join.json)
     members:
       type: array
       items:
         $ref: 'schemas-common.yaml#/Member'
       description: List of current swarm members
+    settings:
+      type: object
+      description: Swarm configuration settings
+      properties:
+        allow_member_invite:
+          type: boolean
+          description: Whether non-master members can invite others
+        require_approval:
+          type: boolean
+          description: Whether the master must approve join requests
 
 JoinPendingResponse:
   type: object

@@ -120,18 +120,32 @@ wake request arrives:
 3. Otherwise, invoke the agent via the configured method
 
 Session state is persisted to `WAKE_EP_SESSION_FILE` (default:
-`data/session.json`).
+`/root/.swarm/session.json`).
 
 ## Agent Invocation Methods
 
-The `AgentInvoker` class supports three pluggable methods configured via
+The `AgentInvoker` class supports five pluggable methods configured via
 `WAKE_EP_INVOKE_METHOD`:
 
-| Method | Description | `WAKE_EP_INVOKE_TARGET` |
-|--------|-------------|-------------------------|
-| `subprocess` | Launch a shell command | Command template (e.g., `claude-code --skill swarm {message_id}`) |
-| `webhook` | POST to a URL | Webhook URL |
+| Method | Description | Configuration |
+|--------|-------------|---------------|
+| `sdk` | Invoke via the Claude Agent SDK | `WAKE_EP_SDK_CWD`, `WAKE_EP_SDK_PERMISSION_MODE`, `WAKE_EP_SDK_MAX_TURNS`, `WAKE_EP_SDK_MODEL` |
+| `tmux` | Send notification into a tmux session | `WAKE_EP_TMUX_TARGET` (required) |
+| `subprocess` | Launch a shell command | `WAKE_EP_INVOKE_TARGET` (command template) |
+| `webhook` | POST to a URL | `WAKE_EP_INVOKE_TARGET` (webhook URL) |
 | `noop` | Do nothing (dry-run/testing) | Not required |
+
+### SDK Invocation
+
+Uses the Claude Agent SDK to start a new agent session (or resume an
+existing one). The session runs in the configured working directory with
+specified permissions and model. Requires the `claude-agent-sdk` package.
+
+### Tmux Invocation
+
+Sends the wake payload as a notification string into a running tmux session
+via `tmux send-keys`. Requires `WAKE_EP_TMUX_TARGET` to be set to a valid
+tmux session/window/pane target (e.g., `main:0`).
 
 ### Subprocess Invocation
 
@@ -149,9 +163,14 @@ if the webhook responds with HTTP 400+.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `WAKE_EP_ENABLED` | `false` | Mount the /api/wake endpoint |
-| `WAKE_EP_INVOKE_METHOD` | `noop` | Invocation strategy |
-| `WAKE_EP_INVOKE_TARGET` | (empty) | Command template or webhook URL |
+| `WAKE_EP_ENABLED` | `true` | Mount the /api/wake endpoint |
+| `WAKE_EP_INVOKE_METHOD` | `noop` | Invocation strategy: sdk, tmux, subprocess, webhook, noop |
+| `WAKE_EP_INVOKE_TARGET` | (empty) | Command template or webhook URL (subprocess/webhook only) |
 | `WAKE_EP_SECRET` | (empty) | Shared secret for auth (empty disables) |
-| `WAKE_EP_SESSION_FILE` | `data/session.json` | Session state file path |
+| `WAKE_EP_SESSION_FILE` | `/root/.swarm/session.json` | Session state file path |
 | `WAKE_EP_SESSION_TIMEOUT` | `30` | Session expiry in minutes |
+| `WAKE_EP_SDK_CWD` | `/root/nexus` | Working directory for SDK invocation |
+| `WAKE_EP_SDK_PERMISSION_MODE` | `acceptEdits` | SDK permission mode |
+| `WAKE_EP_SDK_MAX_TURNS` | (unlimited) | Max conversation turns per SDK invocation |
+| `WAKE_EP_SDK_MODEL` | (SDK default) | Model override for SDK invocations |
+| `WAKE_EP_TMUX_TARGET` | (empty) | Tmux session target (required for tmux method) |

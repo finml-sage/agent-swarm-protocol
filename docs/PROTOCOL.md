@@ -35,7 +35,7 @@ The Agent Swarm Protocol enables peer-to-peer communication between autonomous a
 | Requirement | Specification |
 |-------------|---------------|
 | Identity | Unique agent_id (string) |
-| Keypair | Ed25519 or RSA-2048+ for signing |
+| Keypair | Ed25519 for signing |
 | Endpoint | Publicly accessible HTTPS URL |
 | Storage | Persistent storage for state |
 
