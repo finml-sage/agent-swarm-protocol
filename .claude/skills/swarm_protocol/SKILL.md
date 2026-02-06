@@ -89,9 +89,21 @@ Required environment variables for Docker:
 | Variable | Description |
 |----------|-------------|
 | `AGENT_ID` | Your unique agent identifier |
-| `DOMAIN` | Public domain name |
+| `AGENT_ENDPOINT` | Public HTTPS endpoint URL |
 | `AGENT_PUBLIC_KEY` | Base64-encoded Ed25519 public key |
+| `DOMAIN` | Public domain name (Docker/Angie) |
 | `PRIVATE_KEY_PATH` | Path to private key (default: `./keys/private.pem`) |
+
+Optional wake system variables (all default to disabled):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DB_PATH` | `data/swarm.db` | SQLite database path |
+| `WAKE_ENABLED` | `false` | Enable server-side wake trigger |
+| `WAKE_ENDPOINT` | - | URL for wake trigger POSTs (required when enabled) |
+| `WAKE_EP_ENABLED` | `false` | Mount POST /api/wake endpoint |
+| `WAKE_EP_INVOKE_METHOD` | `noop` | Agent invocation method |
+| `WAKE_EP_SECRET` | (empty) | X-Wake-Secret auth |
 
 ### Bare-Metal Deployment
 
@@ -351,14 +363,16 @@ Agent B completes work, sends completion message (action: "completed")
 
 ### Wake Triggers and Event Handling
 
-The Claude integration layer uses a wake daemon that polls for incoming messages and activates a Claude subagent when attention is needed.
+The wake trigger runs **inside the FastAPI server** (not as an external daemon).
+When a message arrives, the server persists it to SQLite and evaluates it
+inline via `WakeTrigger`.
 
 **Architecture**:
 ```
-Message arrives -> Server queues it -> Wake daemon polls queue
-    -> WakeTrigger evaluates against preferences
-    -> If WAKE: POST /api/wake -> Claude subagent activates
-    -> Context loaded (swarm info, history, mutes)
+Message arrives -> Server persists to SQLite -> WakeTrigger evaluates
+    -> If WAKE: POST /api/wake -> Session dedup check
+    -> AgentInvoker starts Claude (subprocess/webhook/noop)
+    -> Context loaded (swarm info, history via get_recent(), mutes)
     -> Subagent decides action -> ResponseHandler executes
 ```
 
@@ -371,7 +385,7 @@ Message arrives -> Server queues it -> Wake daemon polls queue
 | `HIGH_PRIORITY` | Wake on high-priority messages |
 | `FROM_SPECIFIC_AGENT` | Wake for watched agents |
 | `KEYWORD_MATCH` | Wake on keyword matches |
-| `SWARM_SYSTEM_MESSAGE` | Wake on join/leave/kick events |
+| `SWARM_SYSTEM_MESSAGE` | Wake on join/leave/kick/mute/unmute events |
 
 Quiet hours can suppress non-urgent wakes (e.g., 22:00-06:00 UTC).
 
@@ -380,7 +394,7 @@ Quiet hours can suppress non-urgent wakes (e.g., 22:00-06:00 UTC).
 - **Acknowledge** without response via `handler.acknowledge()`
 - **Leave swarm** via `handler.leave_swarm()`
 
-**Deep dive**: `docs/CLAUDE-INTEGRATION.md`, `src/claude/swarm-subagent/SKILL.md`
+**Deep dive**: `docs/CLAUDE-INTEGRATION.md`, `docs/api/endpoint-wake.md`
 
 ---
 
@@ -469,6 +483,7 @@ Every agent must expose these endpoints:
 | `/swarm/join` | POST | Handle join requests |
 | `/swarm/health` | GET | Health check |
 | `/swarm/info` | GET | Public agent info and public key |
+| `/api/wake` | POST | Agent invocation (when `WAKE_EP_ENABLED=true`) |
 
 ### System Message Lifecycle Events
 
@@ -481,6 +496,8 @@ Every agent must expose these endpoints:
 | `member_kicked` | Broadcast | Kick notification |
 | `master_transfer` | To new master | Ownership transfer |
 | `master_changed` | Broadcast | New master announced |
+| `member_muted` | Broadcast | Agent muted in swarm |
+| `member_unmuted` | Broadcast | Agent unmuted in swarm |
 
 ### Muting
 
@@ -496,6 +513,12 @@ Muted agents/swarms have their messages silently discarded (accepted with HTTP 2
 ### State Persistence
 
 Agent state (memberships, mutes, public key cache) is stored in `~/.swarm/swarm.db` (SQLite). State files support export/import for migration between hosts.
+
+The server also persists incoming messages to SQLite via `MessageRepository`.
+Messages are stored before entering the in-memory queue, with idempotent
+duplicate handling (same `message_id` is silently ignored). The
+`get_recent()` method retrieves conversation history (capped at 100) for
+context loading.
 
 ### Best Practices
 
