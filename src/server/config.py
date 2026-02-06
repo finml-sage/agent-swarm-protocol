@@ -23,11 +23,26 @@ class RateLimitConfig:
 
 
 @dataclass(frozen=True)
+class WakeConfig:
+    """Configuration for wake trigger behavior.
+
+    Set ``enabled=True`` and provide ``endpoint`` to activate automatic
+    agent notification when messages arrive.  When disabled the trigger
+    is not created and no HTTP calls are made.
+    """
+
+    enabled: bool = False
+    endpoint: str = ""
+    timeout: float = 5.0
+
+
+@dataclass(frozen=True)
 class ServerConfig:
     agent: AgentConfig
     rate_limit: RateLimitConfig = field(default_factory=RateLimitConfig)
     queue_max_size: int = 10000
     db_path: Path = field(default_factory=lambda: Path("data/swarm.db"))
+    wake: WakeConfig = field(default_factory=WakeConfig)
 
 
 def load_config_from_env() -> ServerConfig:
@@ -43,6 +58,12 @@ def load_config_from_env() -> ServerConfig:
         missing.append("AGENT_PUBLIC_KEY")
     if missing:
         raise ValueError(f"Missing: {', '.join(missing)}")
+
+    wake_enabled = os.environ.get("WAKE_ENABLED", "").lower() in ("1", "true", "yes")
+    wake_endpoint = os.environ.get("WAKE_ENDPOINT", "")
+    if wake_enabled and not wake_endpoint:
+        raise ValueError("WAKE_ENDPOINT required when WAKE_ENABLED is set")
+
     return ServerConfig(
         agent=AgentConfig(
             agent_id=agent_id,
@@ -57,4 +78,9 @@ def load_config_from_env() -> ServerConfig:
         ),
         queue_max_size=int(os.environ.get("QUEUE_MAX_SIZE", "10000")),
         db_path=Path(os.environ.get("DB_PATH", "data/swarm.db")),
+        wake=WakeConfig(
+            enabled=wake_enabled,
+            endpoint=wake_endpoint,
+            timeout=float(os.environ.get("WAKE_TIMEOUT", "5.0")),
+        ),
     )

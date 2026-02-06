@@ -16,8 +16,25 @@ from src.server.routes.join import create_join_router
 from src.server.routes.health import create_health_router
 from src.server.routes.info import create_info_router
 from src.state.database import DatabaseManager
+from src.claude.notification_preferences import NotificationPreferences
+from src.claude.wake_trigger import WakeTrigger
 
 logger = logging.getLogger(__name__)
+
+
+def _build_wake_trigger(
+    config: ServerConfig,
+    db_manager: DatabaseManager,
+) -> Optional[WakeTrigger]:
+    """Build a WakeTrigger when wake config is enabled, else return None."""
+    if not config.wake.enabled:
+        return None
+    return WakeTrigger(
+        db_manager=db_manager,
+        wake_endpoint=config.wake.endpoint,
+        preferences=NotificationPreferences(),
+        wake_timeout=config.wake.timeout,
+    )
 
 
 def create_app(config: Optional[ServerConfig] = None) -> FastAPI:
@@ -39,6 +56,16 @@ def create_app(config: Optional[ServerConfig] = None) -> FastAPI:
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await db_manager.initialize()
         logger.info("Database initialized at %s", config.db_path)
+
+        wake_trigger = _build_wake_trigger(config, db_manager)
+        if wake_trigger is not None:
+            logger.info(
+                "WakeTrigger active, endpoint=%s", config.wake.endpoint,
+            )
+        else:
+            logger.info("WakeTrigger disabled")
+
+        app.state.wake_trigger = wake_trigger
         yield
         await db_manager.close()
 
