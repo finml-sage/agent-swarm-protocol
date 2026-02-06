@@ -44,18 +44,14 @@ htmlcov/
 .ruff_cache/
 .mypy_cache/
 
-# Docker
+# Data
 data/
 logs/
-docker-compose.override.yml
 
 # Secrets - never commit
 keys/
 *.pem
 *.key
-
-# Development certificates (generated)
-docker/angie/certs/dev/*.pem
 
 # SQLite databases
 *.db
