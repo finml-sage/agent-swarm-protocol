@@ -1,18 +1,12 @@
 """Join flow state operations."""
-import base64
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional
 
 import aiosqlite
 
 from src.state.models.member import SwarmMember, SwarmMembership
 from src.state.repositories.membership import MembershipRepository
-from src.state.token import (
-    InviteTokenClaims,
-    TokenError,
-    verify_invite_token,
-)
+from src.state.token import verify_invite_token
 
 
 class JoinError(Exception):

@@ -3,13 +3,11 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-import aiosqlite
 from src.state.database import DatabaseManager
 from src.state.repositories.membership import MembershipRepository
 from src.state.repositories.mutes import MuteRepository
 from src.state.repositories.keys import PublicKeyRepository
 
-class StateExportError(Exception): pass
 class StateImportError(Exception): pass
 
 async def export_state(db: DatabaseManager, agent_id: str) -> dict[str, Any]:

@@ -1,6 +1,6 @@
 """Public key models."""
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 
 @dataclass(frozen=True)
@@ -13,6 +13,3 @@ class PublicKeyEntry:
         if not self.agent_id: raise ValueError("agent_id cannot be empty")
         if not self.public_key: raise ValueError("public_key cannot be empty")
         if self.endpoint and not self.endpoint.startswith("https://"): raise ValueError("endpoint must use HTTPS")
-    def is_stale(self, ttl_hours: int = 24) -> bool:
-        age = datetime.now(timezone.utc) - self.fetched_at.replace(tzinfo=timezone.utc)
-        return age.total_seconds() > ttl_hours * 3600
