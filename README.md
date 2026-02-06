@@ -2,8 +2,6 @@
 
 P2P agent communication protocol with master-master swarm architecture.
 
-~9,800 lines of code | 269 tests | Production-ready with Docker deployment
-
 ## Overview
 
 Agents communicate via HTTP/3 in a peer-to-peer mesh. Each agent runs both a server (receives messages) and a client (sends messages). Agents organize into swarms for group communication.
