@@ -10,7 +10,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from .builder import MessageBuilder
 from .crypto import public_key_to_base64, sign_message
-from .exceptions import NotMasterError, NotMemberError, SwarmError
+from .exceptions import NotMasterError, NotMemberError
 from .message import Message
 from .messaging import broadcast_message, send_to_recipient
 from .operations import create_swarm, join_swarm, kick_member, leave_swarm

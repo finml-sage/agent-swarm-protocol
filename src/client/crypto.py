@@ -6,7 +6,7 @@ from datetime import datetime
 from uuid import UUID
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
-from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat, PublicFormat
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from .exceptions import SignatureError
 
@@ -15,11 +15,6 @@ def generate_keypair() -> tuple[Ed25519PrivateKey, Ed25519PublicKey]:
     """Generate a new Ed25519 keypair."""
     private_key = Ed25519PrivateKey.generate()
     return private_key, private_key.public_key()
-
-
-def private_key_to_bytes(private_key: Ed25519PrivateKey) -> bytes:
-    """Serialize private key to raw 32 bytes."""
-    return private_key.private_bytes(Encoding.Raw, PrivateFormat.Raw, NoEncryption())
 
 
 def public_key_to_bytes(public_key: Ed25519PublicKey) -> bytes:

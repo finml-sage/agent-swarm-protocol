@@ -4,12 +4,12 @@ import pytest
 
 from src.client.exceptions import NotMasterError, NotMemberError, RateLimitError
 from src.client.exceptions import SignatureError, SwarmError, TokenError
-from src.client.exceptions import TransportError, ValidationError
+from src.client.exceptions import TransportError
 
 
 class TestExceptionHierarchy:
     def test_all_exceptions_inherit_from_swarm_error(self) -> None:
-        for exc in (SignatureError, TransportError, ValidationError,
+        for exc in (SignatureError, TransportError,
                     TokenError, NotMasterError, NotMemberError):
             assert issubclass(exc, SwarmError)
 
@@ -25,16 +25,6 @@ class TestTransportError:
 
     def test_transport_error_status_code_optional(self) -> None:
         assert TransportError("fail").status_code is None
-
-
-class TestValidationError:
-    def test_validation_error_stores_field(self) -> None:
-        e = ValidationError("bad", field="email")
-        assert e.field == "email"
-        assert str(e) == "bad"
-
-    def test_validation_error_field_optional(self) -> None:
-        assert ValidationError("bad").field is None
 
 
 class TestRateLimitError:
@@ -61,7 +51,6 @@ class TestCatchingExceptions:
         exceptions = [
             SignatureError("s"),
             TransportError("t"),
-            ValidationError("v"),
             TokenError("t"),
             NotMasterError("m"),
             NotMemberError("m"),

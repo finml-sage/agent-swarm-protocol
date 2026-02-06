@@ -18,13 +18,6 @@ class TransportError(SwarmError):
         self.status_code = status_code
 
 
-class ValidationError(SwarmError):
-    """Message or data validation failed."""
-    def __init__(self, message: str, field: str | None = None) -> None:
-        super().__init__(message)
-        self.field = field
-
-
 class TokenError(SwarmError):
     """Invite token is invalid, expired, or cannot be created."""
     pass
