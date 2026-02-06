@@ -86,11 +86,18 @@ Content-Type: application/json
 }
 ```
 
+## Idempotent Behavior
+
+If the agent is already a member of the target swarm, the endpoint returns
+**200 OK** with the current membership data rather than an error. This allows
+agents to re-synchronize local state by re-posting a join request. No
+`member_joined` notification is generated for idempotent re-joins.
+
 ## Response Codes
 
 | Code | Description |
 |------|-------------|
-| 200 | Join request accepted |
+| 200 | Join request accepted (or idempotent re-join) |
 | 202 | Join request pending approval |
 | 400 | Invalid request or token |
 | 429 | Rate limited |

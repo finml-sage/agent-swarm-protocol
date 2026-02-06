@@ -271,7 +271,12 @@ JWT Payload:
 }
 ```
 
-**Side Effect**: Master broadcasts `member_joined` to all existing members.
+**Idempotent**: If the agent is already a member, returns 200 with current
+membership data instead of 409. No `member_joined` notification is emitted
+for re-joins.
+
+**Side Effect**: On genuinely new joins, master persists a `member_joined`
+notification to the message queue and broadcasts to all existing members.
 
 ### 5.4 Leave Swarm
 
