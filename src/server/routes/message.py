@@ -12,7 +12,7 @@ from src.server.queue import MessageQueue
 from src.state.database import DatabaseManager
 from src.state.models.message import QueuedMessage
 from src.state.repositories.messages import MessageRepository
-from src.claude.wake_trigger import WakeTrigger, WakeTriggerError
+from src.claude.wake_trigger import WakeTrigger
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,9 @@ def create_message_router(
                 )
         await queue.put(body)
 
-        # Fire-and-forget wake trigger evaluation (non-blocking)
+        # Fire-and-forget wake trigger evaluation (non-blocking).
+        # Catch all exceptions: wake is a side effect that must never
+        # prevent message acceptance (e.g. httpx.ReadTimeout, WakeTriggerError).
         wake_trigger: Optional[WakeTrigger] = getattr(
             request.app.state, "wake_trigger", None,
         )
@@ -71,7 +73,7 @@ def create_message_router(
                     body.message_id,
                     event.decision.value,
                 )
-            except WakeTriggerError as exc:
+            except Exception as exc:
                 # Log but do not fail the message acceptance
                 logger.warning(
                     "Wake trigger failed for message %s: %s",
