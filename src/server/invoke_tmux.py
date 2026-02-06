@@ -31,6 +31,10 @@ def _format_notification(payload: dict) -> str:
 async def invoke_tmux(payload: dict, config: TmuxInvokeConfig) -> None:
     """Send a notification into a tmux session via ``tmux send-keys``.
 
+    Uses two separate send-keys calls with a small delay between them.
+    The first call sends the text, the second sends C-m (Enter).
+    A single combined call does not reliably deliver the Enter key.
+
     Args:
         payload: The wake payload with message metadata.
         config: Tmux configuration (session target).
@@ -43,9 +47,14 @@ async def invoke_tmux(payload: dict, config: TmuxInvokeConfig) -> None:
         "Sending tmux notification to target=%s", config.tmux_target,
     )
 
-    process = await asyncio.create_subprocess_exec(
-        "tmux", "send-keys", "-t", config.tmux_target,
-        notification, "C-m",
+    target = config.tmux_target
+    cmd = (
+        f"tmux send-keys -t {target} '{notification}'"
+        f" && sleep 0.3"
+        f" && tmux send-keys -t {target} C-m"
+    )
+    process = await asyncio.create_subprocess_shell(
+        cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
