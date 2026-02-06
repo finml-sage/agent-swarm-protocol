@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
+from ._constants import PROTOCOL_VERSION
 from .crypto import public_key_to_base64, sign_message
 from .exceptions import NotMasterError, NotMemberError, SwarmError, TokenError, TransportError
 from .tokens import parse_invite_token
@@ -75,5 +76,5 @@ async def kick_member(transport: Transport, swarm: SwarmMembership, master_id: s
 
 
 def _sys_msg(mid: UUID, ts: datetime, sender: str, ep: str, rcpt: str, sid: UUID, content: str, sig: str) -> dict:
-    return {"protocol_version": "0.1.0", "message_id": str(mid), "timestamp": ts.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
+    return {"protocol_version": PROTOCOL_VERSION, "message_id": str(mid), "timestamp": ts.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
             "sender": {"agent_id": sender, "endpoint": ep}, "recipient": rcpt, "swarm_id": str(sid), "type": "system", "content": content, "signature": sig}

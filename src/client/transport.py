@@ -6,9 +6,8 @@ from typing import Any
 
 import httpx
 
+from ._constants import PROTOCOL_VERSION
 from .exceptions import RateLimitError, TransportError
-
-PROTOCOL_VERSION = "0.1.0"
 
 
 class Transport:

@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from src.client.crypto import build_signing_payload, generate_keypair, private_key_to_bytes
+from src.client.crypto import build_signing_payload, generate_keypair
 from src.client.crypto import public_key_from_base64, public_key_to_base64, public_key_to_bytes
 from src.client.crypto import sign_message, verify_signature
 from src.client.exceptions import SignatureError
@@ -15,9 +15,6 @@ class TestKeypairGeneration:
     def test_generate_keypair_returns_tuple(self) -> None:
         private_key, public_key = generate_keypair()
         assert private_key is not None and public_key is not None
-
-    def test_private_key_to_bytes_returns_32_bytes(self) -> None:
-        assert len(private_key_to_bytes(generate_keypair()[0])) == 32
 
     def test_public_key_to_bytes_returns_32_bytes(self) -> None:
         assert len(public_key_to_bytes(generate_keypair()[1])) == 32

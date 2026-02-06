@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, field_validator
 
+from ._constants import PROTOCOL_VERSION
 from .types import AttachmentType, MessageType, Priority, ReferenceAction, ReferenceType
 
 
@@ -29,7 +30,7 @@ class MessageReference(BaseModel):
 
 
 class Message(BaseModel):
-    protocol_version: str = Field(default="0.1.0", pattern=r"^\d+\.\d+\.\d+$")
+    protocol_version: str = Field(default=PROTOCOL_VERSION, pattern=r"^\d+\.\d+\.\d+$")
     message_id: UUID = Field(default_factory=uuid4)
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     sender: MessageSender
