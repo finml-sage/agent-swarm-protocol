@@ -36,7 +36,6 @@ def _make_config(
             protocol_version="0.1.0",
         ),
         rate_limit=RateLimitConfig(messages_per_minute=100),
-        queue_max_size=100,
         db_path=tmp_path / "wake_ep.db",
         wake=WakeConfig(enabled=False, endpoint=""),
         wake_endpoint=WakeEndpointConfig(
@@ -176,7 +175,6 @@ class TestWakeEndpointConcurrencyLock:
                     protocol_version="0.1.0",
                 ),
                 rate_limit=RateLimitConfig(messages_per_minute=100),
-                queue_max_size=100,
                 db_path=Path("/tmp/test_lock.db"),
                 wake=WakeConfig(enabled=False, endpoint=""),
                 wake_endpoint=WakeEndpointConfig(

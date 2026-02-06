@@ -28,7 +28,6 @@ def _make_config(tmp_path: Path) -> ServerConfig:
             protocol_version="0.1.0",
         ),
         rate_limit=RateLimitConfig(messages_per_minute=100),
-        queue_max_size=100,
         db_path=tmp_path / "persist.db",
         wake=WakeConfig(enabled=False, endpoint=""),
         wake_endpoint=WakeEndpointConfig(enabled=False),

@@ -12,7 +12,7 @@ from enum import Enum
 from typing import Optional
 
 from src.state.database import DatabaseManager
-from src.state.models.message import QueuedMessage, MessageStatus
+from src.state.models.message import QueuedMessage
 from src.state.repositories.messages import MessageRepository
 
 logger = logging.getLogger(__name__)
