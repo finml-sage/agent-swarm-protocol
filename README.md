@@ -214,12 +214,10 @@ agent-swarm-protocol/
 │   ├── server/              # FastAPI message handler
 │   │   ├── app.py           # Application factory
 │   │   ├── config.py        # Server configuration
-│   │   ├── errors.py        # Error handlers
 │   │   ├── invoke_sdk.py    # Claude Agent SDK invocation
 │   │   ├── invoke_tmux.py   # Tmux session invocation
 │   │   ├── invoker.py       # Pluggable agent invocation (sdk/tmux/subprocess/webhook/noop)
 │   │   ├── notifications.py # Lifecycle event notification service
-│   │   ├── queue.py         # Message queue
 │   │   ├── angie.conf.template  # Angie reverse proxy config template
 │   │   ├── proxy_params.conf    # Proxy parameter defaults
 │   │   ├── security.conf        # Security headers config
