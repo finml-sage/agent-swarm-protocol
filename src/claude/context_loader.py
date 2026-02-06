@@ -108,10 +108,8 @@ class ContextLoader:
         limit: int,
     ) -> tuple[MessageContext, ...]:
         """Get recent completed messages for context."""
-        # Note: This would need a get_recent method on MessageRepository
-        # For now, we return empty as the repo doesn't support this yet
-        # The repository can be extended when needed
-        return ()
+        messages = await repo.get_recent(swarm_id, limit)
+        return tuple(MessageContext.from_queued(m) for m in messages)
 
     async def get_swarm_membership(self, swarm_id: str) -> Optional[SwarmMembership]:
         """Get membership info for a swarm."""

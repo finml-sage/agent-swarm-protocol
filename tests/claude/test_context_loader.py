@@ -1,9 +1,10 @@
 """Tests for context loader."""
 import pytest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from src.state import DatabaseManager, MembershipRepository, MuteRepository
 from src.state.models import QueuedMessage, MessageStatus, SwarmMember, SwarmMembership
+from src.state.repositories import MessageRepository
 from src.claude.context_loader import (
     ContextLoader,
     ContextLoaderError,
@@ -165,3 +166,71 @@ class TestContextLoader:
 
         assert len(swarms) == 1
         assert swarms[0].swarm_id == "swarm-456"
+
+    @pytest.mark.asyncio
+    async def test_load_context_includes_recent_messages(
+        self, db_manager: DatabaseManager, sample_message: QueuedMessage
+    ) -> None:
+        """Context should include recent completed messages from the swarm."""
+        now = datetime.now(timezone.utc)
+        # Insert and complete 3 messages in the same swarm
+        async with db_manager.connection() as conn:
+            repo = MessageRepository(conn)
+            for i in range(3):
+                m = QueuedMessage(
+                    message_id=f"recent-{i}",
+                    swarm_id=sample_message.swarm_id,
+                    sender_id="other-agent",
+                    message_type="message",
+                    content=f"Recent message {i}",
+                    received_at=now + timedelta(seconds=i),
+                )
+                await repo.enqueue(m)
+                await repo.complete(f"recent-{i}")
+
+        loader = ContextLoader(db_manager)
+        context = await loader.load_context(sample_message, recent_limit=10)
+
+        assert len(context.recent_messages) == 3
+        # Most recent first
+        assert context.recent_messages[0].message_id == "recent-2"
+        assert context.recent_messages[2].message_id == "recent-0"
+        # All are MessageContext instances
+        assert all(isinstance(m, MessageContext) for m in context.recent_messages)
+
+    @pytest.mark.asyncio
+    async def test_load_context_recent_messages_respects_limit(
+        self, db_manager: DatabaseManager, sample_message: QueuedMessage
+    ) -> None:
+        """Context should respect recent_limit parameter."""
+        now = datetime.now(timezone.utc)
+        async with db_manager.connection() as conn:
+            repo = MessageRepository(conn)
+            for i in range(5):
+                m = QueuedMessage(
+                    message_id=f"msg-{i}",
+                    swarm_id=sample_message.swarm_id,
+                    sender_id="other-agent",
+                    message_type="message",
+                    content=f"Message {i}",
+                    received_at=now + timedelta(seconds=i),
+                )
+                await repo.enqueue(m)
+                await repo.complete(f"msg-{i}")
+
+        loader = ContextLoader(db_manager)
+        context = await loader.load_context(sample_message, recent_limit=2)
+
+        assert len(context.recent_messages) == 2
+        assert context.recent_messages[0].message_id == "msg-4"
+        assert context.recent_messages[1].message_id == "msg-3"
+
+    @pytest.mark.asyncio
+    async def test_load_context_no_recent_messages(
+        self, db_manager: DatabaseManager, sample_message: QueuedMessage
+    ) -> None:
+        """Context should have empty recent_messages when none exist."""
+        loader = ContextLoader(db_manager)
+        context = await loader.load_context(sample_message)
+
+        assert context.recent_messages == ()
