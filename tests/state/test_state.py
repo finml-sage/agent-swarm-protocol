@@ -249,6 +249,72 @@ class TestMessageRepository:
             result = await repo.get_by_id("nonexistent")
         assert result is None
 
+    @pytest.mark.asyncio
+    async def test_get_recent_returns_completed_messages(self, db):
+        """get_recent returns only completed messages ordered by received_at DESC."""
+        now = datetime.now(timezone.utc)
+        messages = [
+            QueuedMessage(message_id=f"msg-{i:03d}", swarm_id="swarm-001", sender_id="sender-001", message_type="message", content=f"Message {i}", received_at=now + timedelta(seconds=i))
+            for i in range(5)
+        ]
+        async with db.connection() as conn:
+            repo = MessageRepository(conn)
+            for m in messages:
+                await repo.enqueue(m)
+            # Complete messages 0, 2, 4; leave 1, 3 as pending
+            for i in (0, 2, 4):
+                await repo.complete(f"msg-{i:03d}")
+            result = await repo.get_recent("swarm-001", limit=10)
+        assert len(result) == 3
+        assert [m.message_id for m in result] == ["msg-004", "msg-002", "msg-000"]
+        assert all(m.status == MessageStatus.COMPLETED for m in result)
+
+    @pytest.mark.asyncio
+    async def test_get_recent_respects_limit(self, db):
+        """get_recent respects the limit parameter."""
+        now = datetime.now(timezone.utc)
+        async with db.connection() as conn:
+            repo = MessageRepository(conn)
+            for i in range(5):
+                m = QueuedMessage(message_id=f"msg-{i:03d}", swarm_id="swarm-001", sender_id="sender-001", message_type="message", content=f"Message {i}", received_at=now + timedelta(seconds=i))
+                await repo.enqueue(m)
+                await repo.complete(f"msg-{i:03d}")
+            result = await repo.get_recent("swarm-001", limit=2)
+        assert len(result) == 2
+        assert result[0].message_id == "msg-004"
+        assert result[1].message_id == "msg-003"
+
+    @pytest.mark.asyncio
+    async def test_get_recent_filters_by_swarm(self, db):
+        """get_recent only returns messages for the given swarm_id."""
+        now = datetime.now(timezone.utc)
+        async with db.connection() as conn:
+            repo = MessageRepository(conn)
+            for sid in ("swarm-A", "swarm-B"):
+                m = QueuedMessage(message_id=f"msg-{sid}", swarm_id=sid, sender_id="sender-001", message_type="message", content="test", received_at=now)
+                await repo.enqueue(m)
+                await repo.complete(f"msg-{sid}")
+            result = await repo.get_recent("swarm-A", limit=10)
+        assert len(result) == 1
+        assert result[0].swarm_id == "swarm-A"
+
+    @pytest.mark.asyncio
+    async def test_get_recent_empty_swarm(self, db):
+        """get_recent returns empty list for swarm with no completed messages."""
+        async with db.connection() as conn:
+            repo = MessageRepository(conn)
+            result = await repo.get_recent("nonexistent-swarm", limit=10)
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_get_recent_invalid_limit(self, db):
+        """get_recent raises ValueError for non-positive limit."""
+        async with db.connection() as conn:
+            repo = MessageRepository(conn)
+            with pytest.raises(ValueError, match="positive integer"):
+                await repo.get_recent("swarm-001", limit=0)
+            with pytest.raises(ValueError, match="positive integer"):
+                await repo.get_recent("swarm-001", limit=-1)
 
 class TestMuteRepository:
     @pytest.mark.asyncio
