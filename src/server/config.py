@@ -37,12 +37,32 @@ class WakeConfig:
 
 
 @dataclass(frozen=True)
+class WakeEndpointConfig:
+    """Configuration for the /api/wake endpoint that receives wake POSTs.
+
+    ``invoke_method``: how to start the agent -- 'subprocess', 'webhook', or 'noop'.
+    ``invoke_target``: command template (subprocess) or URL (webhook).
+    ``secret``: shared secret for X-Wake-Secret header auth. Empty disables auth.
+    ``session_file``: path to session state file for duplicate-invocation guard.
+    ``session_timeout_minutes``: how long before an active session is considered expired.
+    """
+
+    enabled: bool = False
+    invoke_method: str = "noop"
+    invoke_target: str = ""
+    secret: str = ""
+    session_file: str = "data/session.json"
+    session_timeout_minutes: int = 30
+
+
+@dataclass(frozen=True)
 class ServerConfig:
     agent: AgentConfig
     rate_limit: RateLimitConfig = field(default_factory=RateLimitConfig)
     queue_max_size: int = 10000
     db_path: Path = field(default_factory=lambda: Path("data/swarm.db"))
     wake: WakeConfig = field(default_factory=WakeConfig)
+    wake_endpoint: WakeEndpointConfig = field(default_factory=WakeEndpointConfig)
 
 
 def load_config_from_env() -> ServerConfig:
@@ -60,9 +80,18 @@ def load_config_from_env() -> ServerConfig:
         raise ValueError(f"Missing: {', '.join(missing)}")
 
     wake_enabled = os.environ.get("WAKE_ENABLED", "").lower() in ("1", "true", "yes")
-    wake_endpoint = os.environ.get("WAKE_ENDPOINT", "")
-    if wake_enabled and not wake_endpoint:
+    wake_endpoint_url = os.environ.get("WAKE_ENDPOINT", "")
+    if wake_enabled and not wake_endpoint_url:
         raise ValueError("WAKE_ENDPOINT required when WAKE_ENABLED is set")
+
+    wake_ep_enabled = os.environ.get("WAKE_EP_ENABLED", "").lower() in ("1", "true", "yes")
+    invoke_method = os.environ.get("WAKE_EP_INVOKE_METHOD", "noop")
+    invoke_target = os.environ.get("WAKE_EP_INVOKE_TARGET", "")
+    if wake_ep_enabled and invoke_method != "noop" and not invoke_target:
+        raise ValueError(
+            "WAKE_EP_INVOKE_TARGET required when WAKE_EP_ENABLED is set "
+            f"and method is '{invoke_method}'"
+        )
 
     return ServerConfig(
         agent=AgentConfig(
@@ -80,7 +109,17 @@ def load_config_from_env() -> ServerConfig:
         db_path=Path(os.environ.get("DB_PATH", "data/swarm.db")),
         wake=WakeConfig(
             enabled=wake_enabled,
-            endpoint=wake_endpoint,
+            endpoint=wake_endpoint_url,
             timeout=float(os.environ.get("WAKE_TIMEOUT", "5.0")),
+        ),
+        wake_endpoint=WakeEndpointConfig(
+            enabled=wake_ep_enabled,
+            invoke_method=invoke_method,
+            invoke_target=invoke_target,
+            secret=os.environ.get("WAKE_EP_SECRET", ""),
+            session_file=os.environ.get("WAKE_EP_SESSION_FILE", "data/session.json"),
+            session_timeout_minutes=int(
+                os.environ.get("WAKE_EP_SESSION_TIMEOUT", "30")
+            ),
         ),
     )
