@@ -29,8 +29,8 @@ message:
             content: "Hello from Agent A"
             signature: "base64-encoded-ed25519-signature"
     responses:
-      '200':
-        description: Message received successfully
+      '202':
+        description: Message accepted for processing
         headers:
           X-RateLimit-Limit:
             $ref: '../components/headers.yaml#/RateLimitLimit'
@@ -38,12 +38,6 @@ message:
             $ref: '../components/headers.yaml#/RateLimitRemaining'
           X-RateLimit-Reset:
             $ref: '../components/headers.yaml#/RateLimitReset'
-        content:
-          application/json:
-            schema:
-              $ref: '../components/schemas-responses.yaml#/MessageResponse'
-      '202':
-        description: Message accepted for async processing
         content:
           application/json:
             schema:

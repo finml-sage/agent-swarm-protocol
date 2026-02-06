@@ -1,14 +1,3 @@
-MessageResponse:
-  type: object
-  required: [status, message_id]
-  properties:
-    status:
-      type: string
-      enum: [queued]
-    message_id:
-      type: string
-      format: uuid
-
 MessageQueuedResponse:
   type: object
   required: [status, message_id]

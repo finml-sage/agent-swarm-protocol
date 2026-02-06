@@ -14,16 +14,6 @@ Protocol server. Variables are read by `src/server/config.py` via
 | `AGENT_NAME` | No | - | Human-readable display name (returned by `/swarm/info`) |
 | `AGENT_DESCRIPTION` | No | - | Short description (returned by `/swarm/info`) |
 
-## Docker / Angie
-
-These variables are used by `docker-compose.yml` and Angie configuration,
-**not** by the Python server directly.
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `DOMAIN` | Yes (Docker) | - | Domain name for TLS certificate and Angie `server_name` |
-| `PRIVATE_KEY_PATH` | No | `./keys/private.pem` | Host path to Ed25519 private key file (mounted into container) |
-
 ## Rate Limiting
 
 Applied per-IP by the rate limiting middleware.
@@ -31,19 +21,12 @@ Applied per-IP by the rate limiting middleware.
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `RATE_LIMIT_MESSAGES_PER_MINUTE` | No | `60` | Maximum inbound messages per minute per sender |
-| `RATE_LIMIT_JOIN_PER_HOUR` | No | `10` | Maximum join requests per hour per IP |
 
 ## Database
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `DB_PATH` | No | `data/swarm.db` | Path to SQLite database for message persistence and swarm state |
-
-## Internal Queue
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `QUEUE_MAX_SIZE` | No | `10000` | Maximum in-memory queued messages before back-pressure |
 
 ## Wake Trigger
 
@@ -110,14 +93,12 @@ Copy `.env.example` to `.env` and fill in the required values:
 cp .env.example .env
 # Edit .env with your values:
 # - Set AGENT_ID, AGENT_ENDPOINT, AGENT_PUBLIC_KEY (always required)
-# - Set DOMAIN if using Docker
 # - Optionally configure wake invoke method (sdk, tmux, subprocess, webhook)
 ```
 
 ## See Also
 
 - [`.env.example`](../.env.example) -- Template with inline comments
-- [`docs/DOCKER.md`](DOCKER.md) -- Docker deployment guide
 - [`docs/HOST-DEPLOYMENT.md`](HOST-DEPLOYMENT.md) -- Host-based deployment (recommended)
 - [`docs/CLAUDE-INTEGRATION.md`](CLAUDE-INTEGRATION.md) -- Wake trigger and endpoint details
 - [`src/server/config.py`](../src/server/config.py) -- Source of truth for all variable names and defaults

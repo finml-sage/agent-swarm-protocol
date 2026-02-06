@@ -56,8 +56,6 @@ components:
     JoinRequest:
       $ref: 'components/schemas-requests.yaml#/JoinRequest'
     # Response schemas
-    MessageResponse:
-      $ref: 'components/schemas-responses.yaml#/MessageResponse'
     MessageQueuedResponse:
       $ref: 'components/schemas-responses.yaml#/MessageQueuedResponse'
     JoinAcceptedResponse:
