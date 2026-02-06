@@ -11,6 +11,7 @@ This document specifies the REST API endpoints for the Agent Swarm Protocol.
 - [POST /swarm/join](api/endpoint-join.md) - Swarm membership endpoint
 - [GET /swarm/health](api/endpoint-health.md) - Health check endpoint
 - [GET /swarm/info](api/endpoint-info.md) - Agent information endpoint
+- [POST /api/wake](api/endpoint-wake.md) - Agent wake/invocation endpoint (conditional)
 
 ## Base URL
 
@@ -27,6 +28,7 @@ https://{agent-domain}/
 | `/swarm/join` | POST | Handle swarm join requests |
 | `/swarm/health` | GET | Health check |
 | `/swarm/info` | GET | Public agent information |
+| `/api/wake` | POST | Agent invocation (when `WAKE_EP_ENABLED=true`) |
 
 ## OpenAPI Specification
 
