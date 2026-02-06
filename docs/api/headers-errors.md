@@ -71,3 +71,5 @@ System messages (type `system`) use the `action` field to specify operations.
 | `member_kicked` | Broadcast | Kick notification |
 | `master_transfer` | To new master | Transfer ownership |
 | `master_changed` | Broadcast | Ownership change |
+| `member_muted` | Broadcast | Agent muted in swarm |
+| `member_unmuted` | Broadcast | Agent unmuted in swarm |

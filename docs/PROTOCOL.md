@@ -318,6 +318,38 @@ notification to the message queue and broadcasts to all existing members.
 
 **Side Effect**: Old master broadcasts `master_changed` to all members.
 
+### 5.7 Lifecycle Event Notifications
+
+Membership lifecycle events generate system notifications that are persisted
+to the message queue via `src/server/notifications.py`. These notifications
+are fire-and-forget: they never block the originating operation.
+
+**Supported lifecycle actions:**
+
+| Action | Trigger | Fields |
+|--------|---------|--------|
+| `member_joined` | Successful join (new members only) | swarm_id, agent_id |
+| `member_left` | Voluntary leave | swarm_id, agent_id |
+| `member_kicked` | Master kicks a member | swarm_id, agent_id, initiated_by, reason |
+| `member_muted` | Agent muted in swarm | swarm_id, agent_id, initiated_by, reason |
+| `member_unmuted` | Agent unmuted in swarm | swarm_id, agent_id, initiated_by |
+
+**Notification message format:**
+
+```json
+{
+  "type": "system",
+  "action": "member_joined",
+  "swarm_id": "550e8400-e29b-41d4-a716-446655440000",
+  "agent_id": "agent-002",
+  "initiated_by": null,
+  "reason": null
+}
+```
+
+Notifications are stored as `QueuedMessage` records with `message_type=system`.
+They can be retrieved via `MessageRepository.get_recent()` for context loading.
+
 ## 6. Endpoints
 
 ### 6.1 Required Endpoints
