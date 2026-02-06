@@ -3,12 +3,15 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Callable, Awaitable
+import logging
 
 import httpx
 
 from src.state import DatabaseManager, QueuedMessage
 from src.claude.notification_preferences import NotificationPreferences, NotificationLevel
 from src.claude.context_loader import ContextLoader, SwarmContext
+
+logger = logging.getLogger(__name__)
 
 
 class WakeDecision(Enum):
@@ -88,15 +91,25 @@ class WakeTrigger:
         )
 
     async def _trigger_wake(self, event: WakeEvent) -> None:
-        """POST to wake endpoint to trigger Claude activation."""
+        """POST to wake endpoint to trigger Claude activation.
+
+        Connection failures are caught and wrapped as WakeTriggerError
+        so callers can handle them uniformly without leaking transport
+        details.
+        """
         payload = {
             "message_id": event.message.message_id, "swarm_id": event.message.swarm_id,
             "sender_id": event.message.sender_id, "notification_level": event.notification_level.name.lower(),
         }
-        async with httpx.AsyncClient(timeout=self._wake_timeout) as client:
-            response = await client.post(self._wake_endpoint, json=payload)
-            if response.status_code >= 400:
-                raise WakeTriggerError(f"Wake endpoint returned {response.status_code}: {response.text}")
+        try:
+            async with httpx.AsyncClient(timeout=self._wake_timeout) as client:
+                response = await client.post(self._wake_endpoint, json=payload)
+                if response.status_code >= 400:
+                    raise WakeTriggerError(f"Wake endpoint returned {response.status_code}: {response.text}")
+        except httpx.HTTPError as exc:
+            raise WakeTriggerError(
+                f"Wake endpoint unreachable at {self._wake_endpoint}: {exc}"
+            ) from exc
 
     async def _notify_callbacks(self, event: WakeEvent) -> None:
         """Notify all registered callbacks of the wake event."""

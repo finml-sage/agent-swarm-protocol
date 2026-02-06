@@ -7,13 +7,19 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.server.app import create_app
-from src.server.config import AgentConfig, RateLimitConfig, ServerConfig
+from src.server.config import (
+    AgentConfig, RateLimitConfig, ServerConfig, WakeConfig, WakeEndpointConfig,
+)
 from src.state.database import DatabaseManager
 from src.state.repositories.messages import MessageRepository
 
 
 def _make_config(tmp_path: Path) -> ServerConfig:
-    """Build a minimal ServerConfig pointing at a temp database."""
+    """Build a minimal ServerConfig pointing at a temp database.
+
+    Wake trigger and endpoint are explicitly disabled so persistence
+    tests run in isolation without network calls.
+    """
     return ServerConfig(
         agent=AgentConfig(
             agent_id="test-agent-001",
@@ -24,6 +30,8 @@ def _make_config(tmp_path: Path) -> ServerConfig:
         rate_limit=RateLimitConfig(messages_per_minute=100),
         queue_max_size=100,
         db_path=tmp_path / "persist.db",
+        wake=WakeConfig(enabled=False, endpoint=""),
+        wake_endpoint=WakeEndpointConfig(enabled=False),
     )
 
 

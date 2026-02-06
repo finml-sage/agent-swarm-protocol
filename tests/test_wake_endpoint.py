@@ -35,7 +35,7 @@ def _make_config(
         rate_limit=RateLimitConfig(messages_per_minute=100),
         queue_max_size=100,
         db_path=tmp_path / "wake_ep.db",
-        wake=WakeConfig(enabled=False),
+        wake=WakeConfig(enabled=False, endpoint=""),
         wake_endpoint=WakeEndpointConfig(
             enabled=wake_ep_enabled,
             invoke_method=invoke_method,
@@ -231,16 +231,16 @@ class TestAgentInvoker:
         await invoker.invoke({"message_id": "test"})  # Should not raise
 
 
-class TestWakeEndpointConfig:
+class TestWakeEndpointConfigDefaults:
     """Test WakeEndpointConfig defaults and construction."""
 
     def test_defaults(self) -> None:
         cfg = WakeEndpointConfig()
-        assert cfg.enabled is False
+        assert cfg.enabled is True
         assert cfg.invoke_method == "noop"
         assert cfg.invoke_target == ""
         assert cfg.secret == ""
-        assert cfg.session_file == "data/session.json"
+        assert cfg.session_file == "/root/.swarm/session.json"
         assert cfg.session_timeout_minutes == 30
 
     def test_custom_values(self) -> None:

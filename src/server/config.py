@@ -1,8 +1,15 @@
 """Server configuration."""
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 import os
+
+logger = logging.getLogger(__name__)
+
+_RECOGNISED_BOOL_VALUES = frozenset(
+    ("1", "true", "yes", "0", "false", "no")
+)
 
 
 @dataclass(frozen=True)
@@ -26,19 +33,21 @@ class RateLimitConfig:
 class WakeConfig:
     """Configuration for wake trigger behavior.
 
-    Set ``enabled=True`` and provide ``endpoint`` to activate automatic
-    agent notification when messages arrive.  When disabled the trigger
-    is not created and no HTTP calls are made.
+    Enabled by default.  Set ``WAKE_ENABLED=false`` to disable the
+    automatic agent notification when messages arrive.  When disabled
+    the trigger is not created and no HTTP calls are made.
     """
 
-    enabled: bool = False
-    endpoint: str = ""
+    enabled: bool = True
+    endpoint: str = "http://localhost:8080/api/wake"
     timeout: float = 5.0
 
 
 @dataclass(frozen=True)
 class WakeEndpointConfig:
     """Configuration for the /api/wake endpoint that receives wake POSTs.
+
+    Enabled by default.  Set ``WAKE_EP_ENABLED=false`` to disable.
 
     ``invoke_method``: how to start the agent -- 'subprocess', 'webhook', 'sdk', or 'noop'.
     ``invoke_target``: command template (subprocess) or URL (webhook). Not used by sdk/noop.
@@ -51,11 +60,11 @@ class WakeEndpointConfig:
     ``sdk_model``: model override for SDK invocations (None uses default).
     """
 
-    enabled: bool = False
+    enabled: bool = True
     invoke_method: str = "noop"
     invoke_target: str = ""
     secret: str = ""
-    session_file: str = "data/session.json"
+    session_file: str = "/root/.swarm/session.json"
     session_timeout_minutes: int = 30
     sdk_cwd: str = "/root/nexus"
     sdk_permission_mode: str = "acceptEdits"
@@ -73,6 +82,28 @@ class ServerConfig:
     wake_endpoint: WakeEndpointConfig = field(default_factory=WakeEndpointConfig)
 
 
+def _parse_bool(value: str, default: bool) -> bool:
+    """Parse a boolean environment variable with explicit default.
+
+    Recognises ``true/1/yes`` and ``false/0/no`` (case-insensitive).
+    Returns *default* when the value is empty or unset.
+    Logs a warning and returns *default* for unrecognised values
+    (e.g. typos like ``ture``).
+    """
+    if not value:
+        return default
+    normalised = value.lower()
+    if normalised not in _RECOGNISED_BOOL_VALUES:
+        logger.warning(
+            "Unrecognised boolean value %r, using default %s. "
+            "Expected one of: true/1/yes or false/0/no.",
+            value,
+            default,
+        )
+        return default
+    return normalised in ("1", "true", "yes")
+
+
 def load_config_from_env() -> ServerConfig:
     agent_id = os.environ.get("AGENT_ID")
     endpoint = os.environ.get("AGENT_ENDPOINT")
@@ -87,12 +118,24 @@ def load_config_from_env() -> ServerConfig:
     if missing:
         raise ValueError(f"Missing: {', '.join(missing)}")
 
-    wake_enabled = os.environ.get("WAKE_ENABLED", "").lower() in ("1", "true", "yes")
-    wake_endpoint_url = os.environ.get("WAKE_ENDPOINT", "")
+    wake_enabled = _parse_bool(os.environ.get("WAKE_ENABLED", ""), default=True)
+    wake_endpoint_url = os.environ.get(
+        "WAKE_ENDPOINT", "http://localhost:8080/api/wake"
+    )
     if wake_enabled and not wake_endpoint_url:
         raise ValueError("WAKE_ENDPOINT required when WAKE_ENABLED is set")
 
-    wake_ep_enabled = os.environ.get("WAKE_EP_ENABLED", "").lower() in ("1", "true", "yes")
+    wake_ep_enabled = _parse_bool(
+        os.environ.get("WAKE_EP_ENABLED", ""), default=True
+    )
+    wake_ep_secret = os.environ.get("WAKE_EP_SECRET", "")
+    if wake_ep_enabled and not wake_ep_secret:
+        logger.warning(
+            "Wake endpoint enabled with no WAKE_EP_SECRET -- "
+            "unauthenticated access. Set WAKE_EP_SECRET or "
+            "WAKE_EP_ENABLED=false to silence this warning."
+        )
+
     invoke_method = os.environ.get("WAKE_EP_INVOKE_METHOD", "noop")
     invoke_target = os.environ.get("WAKE_EP_INVOKE_TARGET", "")
     _target_required_methods = ("subprocess", "webhook")
@@ -128,8 +171,10 @@ def load_config_from_env() -> ServerConfig:
             enabled=wake_ep_enabled,
             invoke_method=invoke_method,
             invoke_target=invoke_target,
-            secret=os.environ.get("WAKE_EP_SECRET", ""),
-            session_file=os.environ.get("WAKE_EP_SESSION_FILE", "data/session.json"),
+            secret=wake_ep_secret,
+            session_file=os.environ.get(
+                "WAKE_EP_SESSION_FILE", "/root/.swarm/session.json"
+            ),
             session_timeout_minutes=int(
                 os.environ.get("WAKE_EP_SESSION_TIMEOUT", "30")
             ),
