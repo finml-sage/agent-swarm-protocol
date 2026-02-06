@@ -191,6 +191,35 @@ class TestWakeTriggerEnabled:
             assert response.status_code == 200
             assert response.json()["status"] == "queued"
 
+    def test_message_still_queued_on_unexpected_exception(
+        self, tmp_path: Path,
+    ) -> None:
+        """Non-WakeTriggerError exceptions (e.g. ReadTimeout) are caught too."""
+        config = _make_config(tmp_path, wake_enabled=True)
+
+        with patch("src.claude.wake_trigger.httpx.AsyncClient") as mock_http:
+            mock_instance = AsyncMock()
+            mock_instance.__aenter__.return_value = mock_instance
+            mock_instance.__aexit__.return_value = None
+            # Simulate httpx.ReadTimeout which is not a WakeTriggerError
+            mock_instance.post.side_effect = Exception(
+                "Simulated unexpected error (like httpx.ReadTimeout)"
+            )
+            mock_http.return_value = mock_instance
+
+            app = create_app(config)
+            msg = _valid_message()
+            with TestClient(app) as client:
+                response = client.post(
+                    "/swarm/message",
+                    json=msg,
+                    headers={"Content-Type": "application/json"},
+                )
+
+            # Message is still accepted despite unexpected exception
+            assert response.status_code == 200
+            assert response.json()["status"] == "queued"
+
     def test_message_persisted_before_wake(self, tmp_path: Path) -> None:
         """Message is stored in the database before wake trigger runs."""
         config = _make_config(tmp_path, wake_enabled=True)

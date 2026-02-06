@@ -59,6 +59,10 @@ async def invoke_sdk(
     the SDK continues the existing conversation instead of starting
     a new one.
 
+    The async for loop consumes the full generator without an early
+    ``break`` so that the SDK cancel scope exits cleanly in the
+    same task that entered it.
+
     Args:
         payload: The wake payload with message metadata.
         config: SDK invocation configuration.
@@ -107,7 +111,6 @@ async def invoke_sdk(
                 logger.info(
                     "SDK invocation completed, session=%s", session_id,
                 )
-            break
 
     if session_id is None:
         raise RuntimeError("SDK query completed without a ResultMessage")
