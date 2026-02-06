@@ -1,6 +1,7 @@
 """Create a new swarm."""
 
 import asyncio
+from datetime import datetime
 
 import typer
 from rich.console import Console
@@ -10,7 +11,7 @@ from src.cli.utils import ConfigManager
 from src.cli.utils.config import ConfigError
 from src.cli.utils.validation import validate_swarm_name
 from src.client import SwarmClient
-from src.state import DatabaseManager, MembershipRepository
+from src.state import DatabaseManager
 from src.state.models import SwarmMember, SwarmMembership, SwarmSettings
 
 console = Console()
@@ -37,8 +38,6 @@ async def _create_swarm(
             allow_member_invite=allow_member_invite,
             require_approval=require_approval,
         )
-
-        from datetime import datetime
 
         membership = SwarmMembership(
             swarm_id=membership_dict["swarm_id"],

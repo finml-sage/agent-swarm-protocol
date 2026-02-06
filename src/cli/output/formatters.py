@@ -1,9 +1,8 @@
 """Rich terminal output formatters."""
 
-from typing import Any, Sequence
+from typing import Sequence
 
 from rich.console import Console
-from rich.panel import Panel
 from rich.table import Table
 
 
@@ -37,15 +36,3 @@ def format_table(
     for row in rows:
         table.add_row(*row)
     console.print(table)
-
-
-def format_panel(console: Console, title: str, content: str) -> None:
-    """Display content in a panel."""
-    console.print(Panel(content, title=title))
-
-
-def format_key_value(console: Console, data: dict[str, Any]) -> None:
-    """Display key-value pairs."""
-    max_key_len = max(len(k) for k in data.keys()) if data else 0
-    for key, value in data.items():
-        console.print(f"[cyan]{key.ljust(max_key_len)}[/cyan]: {value}")

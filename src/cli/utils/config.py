@@ -1,9 +1,7 @@
 """Configuration file management for CLI."""
 
-import base64
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 import yaml
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -38,7 +36,7 @@ class ConfigManager:
     KEY_FILE = "agent.key"
     DB_FILE = "swarm.db"
 
-    def __init__(self, config_dir: Optional[Path] = None) -> None:
+    def __init__(self, config_dir: Path | None = None) -> None:
         self._config_dir = config_dir or self.DEFAULT_DIR
         self._config_path = self._config_dir / self.CONFIG_FILE
         self._key_path = self._config_dir / self.KEY_FILE
@@ -110,15 +108,3 @@ class ConfigManager:
             f.write(key_bytes)
 
         self._key_path.chmod(0o600)
-
-    def get_public_key_base64(self) -> str:
-        """Get public key as base64 string from saved config."""
-        config = self.load()
-        pub_bytes = config.private_key.public_key().public_bytes(
-            Encoding.Raw,
-            format=__import__(
-                "cryptography.hazmat.primitives.serialization",
-                fromlist=["PublicFormat"],
-            ).PublicFormat.Raw,
-        )
-        return base64.b64encode(pub_bytes).decode("utf-8")
