@@ -40,11 +40,15 @@ class WakeConfig:
 class WakeEndpointConfig:
     """Configuration for the /api/wake endpoint that receives wake POSTs.
 
-    ``invoke_method``: how to start the agent -- 'subprocess', 'webhook', or 'noop'.
-    ``invoke_target``: command template (subprocess) or URL (webhook).
+    ``invoke_method``: how to start the agent -- 'subprocess', 'webhook', 'sdk', or 'noop'.
+    ``invoke_target``: command template (subprocess) or URL (webhook). Not used by sdk/noop.
     ``secret``: shared secret for X-Wake-Secret header auth. Empty disables auth.
     ``session_file``: path to session state file for duplicate-invocation guard.
     ``session_timeout_minutes``: how long before an active session is considered expired.
+    ``sdk_cwd``: working directory for the Claude Agent SDK session.
+    ``sdk_permission_mode``: SDK permission mode (e.g. 'acceptEdits').
+    ``sdk_max_turns``: maximum conversation turns per SDK invocation.
+    ``sdk_model``: model override for SDK invocations (None uses default).
     """
 
     enabled: bool = False
@@ -53,6 +57,10 @@ class WakeEndpointConfig:
     secret: str = ""
     session_file: str = "data/session.json"
     session_timeout_minutes: int = 30
+    sdk_cwd: str = "/root/nexus"
+    sdk_permission_mode: str = "acceptEdits"
+    sdk_max_turns: Optional[int] = None
+    sdk_model: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -87,11 +95,15 @@ def load_config_from_env() -> ServerConfig:
     wake_ep_enabled = os.environ.get("WAKE_EP_ENABLED", "").lower() in ("1", "true", "yes")
     invoke_method = os.environ.get("WAKE_EP_INVOKE_METHOD", "noop")
     invoke_target = os.environ.get("WAKE_EP_INVOKE_TARGET", "")
-    if wake_ep_enabled and invoke_method != "noop" and not invoke_target:
+    _target_required_methods = ("subprocess", "webhook")
+    if wake_ep_enabled and invoke_method in _target_required_methods and not invoke_target:
         raise ValueError(
             "WAKE_EP_INVOKE_TARGET required when WAKE_EP_ENABLED is set "
             f"and method is '{invoke_method}'"
         )
+
+    sdk_max_turns_raw = os.environ.get("WAKE_EP_SDK_MAX_TURNS")
+    sdk_max_turns = int(sdk_max_turns_raw) if sdk_max_turns_raw else None
 
     return ServerConfig(
         agent=AgentConfig(
@@ -121,5 +133,9 @@ def load_config_from_env() -> ServerConfig:
             session_timeout_minutes=int(
                 os.environ.get("WAKE_EP_SESSION_TIMEOUT", "30")
             ),
+            sdk_cwd=os.environ.get("WAKE_EP_SDK_CWD", "/root/nexus"),
+            sdk_permission_mode=os.environ.get("WAKE_EP_SDK_PERMISSION_MODE", "acceptEdits"),
+            sdk_max_turns=sdk_max_turns,
+            sdk_model=os.environ.get("WAKE_EP_SDK_MODEL"),
         ),
     )
