@@ -105,10 +105,10 @@ def list_swarms(
 
 @app.command("purge")
 def purge(
-    messages: bool = typer.Option(False, "--messages", help="Purge old messages"),
+    messages: bool = typer.Option(False, "--messages", help="Purge deleted inbox messages"),
     sessions: bool = typer.Option(False, "--sessions", help="Purge expired sessions"),
-    retention_days: int = typer.Option(
-        30, "--retention-days", help="Message retention (days)"
+    include_archived: bool = typer.Option(
+        False, "--include-archived", help="Also purge archived messages",
     ),
     timeout_minutes: int = typer.Option(
         60, "--timeout-minutes", help="Session timeout (minutes)"
@@ -116,8 +116,8 @@ def purge(
     yes: bool = typer.Option(False, "-y", "--yes", help="Skip confirmation"),
     json_flag: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
-    """Purge old messages and expired sessions."""
-    purge_command(messages, sessions, retention_days, timeout_minutes, yes, json_flag)
+    """Purge soft-deleted inbox messages and expired sessions."""
+    purge_command(messages, sessions, include_archived, timeout_minutes, yes, json_flag)
 
 
 @app.command("send")
@@ -155,12 +155,16 @@ def messages(
         False, "--no-mark-read", help="Don't auto-mark unread messages as read",
     ),
     count: bool = typer.Option(False, "--count", help="Show inbox counts only"),
+    ack: str = typer.Option(None, "--ack", help="Mark message as completed"),
+    archive_all: bool = typer.Option(
+        False, "--archive-all", help="Archive all read messages in swarm",
+    ),
     json_flag: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """List and manage received messages."""
     messages_command(
         swarm_id, limit, status_filter, archive, delete,
-        no_mark_read, count, json_flag,
+        no_mark_read, count, json_flag, ack, archive_all,
     )
 
 

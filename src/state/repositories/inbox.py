@@ -201,6 +201,14 @@ class InboxRepository:
         await self._conn.commit()
         return cursor.rowcount
 
+    async def purge_archived(self) -> int:
+        """Permanently remove all messages marked as archived."""
+        cursor = await self._conn.execute(
+            "DELETE FROM inbox WHERE status = ?", (InboxStatus.ARCHIVED.value,),
+        )
+        await self._conn.commit()
+        return cursor.rowcount
+
     @staticmethod
     def _row_to_message(row: aiosqlite.Row) -> InboxMessage:
         """Convert a database row to an InboxMessage."""
