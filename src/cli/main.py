@@ -4,6 +4,7 @@ import typer
 from rich.console import Console
 
 from src.cli.commands.create import create_command
+from src.cli.commands.export_state import export_command
 from src.cli.commands.init import init_command
 from src.cli.commands.invite import invite_command
 from src.cli.commands.join import join_command
@@ -137,6 +138,15 @@ def status(
 ) -> None:
     """Show agent configuration and status."""
     status_command(verbose, json_flag)
+
+
+@app.command("export")
+def export_state_cmd(
+    output: str = typer.Option(None, "-o", "--output", help="Output file path"),
+    json_flag: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Export agent state to JSON."""
+    export_command(output, json_flag)
 
 
 def main() -> None:
