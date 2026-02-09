@@ -14,6 +14,7 @@ from . import (
     mute,
     purge,
     send,
+    sent,
     status,
     unmute,
 )
@@ -32,6 +33,7 @@ __all__ = [
     "mute",
     "purge",
     "send",
+    "sent",
     "status",
     "unmute",
 ]

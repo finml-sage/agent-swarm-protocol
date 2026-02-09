@@ -1,7 +1,9 @@
 """Send a message to a swarm."""
 
 import asyncio
-from uuid import UUID
+import logging
+from datetime import datetime, timezone
+from uuid import UUID, uuid4
 
 import typer
 from rich.console import Console
@@ -11,8 +13,9 @@ from src.cli.utils import ConfigManager, validate_swarm_id
 from src.cli.utils.config import ConfigError
 from src.cli.utils.validation import validate_message_content
 from src.client import Message, SwarmClient
-from src.state import DatabaseManager, MembershipRepository
+from src.state import DatabaseManager, MembershipRepository, OutboxMessage, OutboxRepository
 
+logger = logging.getLogger(__name__)
 console = Console()
 
 
@@ -58,7 +61,24 @@ async def _send_message(swarm_id: UUID, content: str, recipient: str | None) -> 
     ) as client:
         client.add_swarm(membership_dict)
         target = recipient or "broadcast"
-        return await client.send_message(swarm_id, content, recipient=target)
+        msg = await client.send_message(swarm_id, content, recipient=target)
+
+    try:
+        outbox_msg = OutboxMessage(
+            message_id=str(uuid4()),
+            swarm_id=str(swarm_id),
+            recipient_id=target,
+            message_type="message",
+            content=content,
+            sent_at=datetime.now(timezone.utc),
+        )
+        async with db.connection() as conn:
+            outbox_repo = OutboxRepository(conn)
+            await outbox_repo.insert(outbox_msg)
+    except Exception:
+        logger.warning("Failed to persist sent message to outbox", exc_info=True)
+
+    return msg
 
 
 def send_command(
