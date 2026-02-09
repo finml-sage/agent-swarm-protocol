@@ -16,6 +16,7 @@ from src.cli.commands.messages import messages_command
 from src.cli.commands.mute import mute_command
 from src.cli.commands.purge import purge_command
 from src.cli.commands.send import send_command
+from src.cli.commands.sent import sent_command
 from src.cli.commands.status import status_command
 from src.cli.commands.unmute import unmute_command
 
@@ -128,6 +129,17 @@ def send(
 ) -> None:
     """Send a message to a swarm."""
     send_command(swarm_id, message, to, json_flag)
+
+
+@app.command("sent")
+def sent(
+    swarm_id: str = typer.Option(..., "-s", "--swarm", help="Swarm ID"),
+    limit: int = typer.Option(20, "-l", "--limit", help="Max messages to show"),
+    count: bool = typer.Option(False, "--count", help="Show count only"),
+    json_flag: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """List sent messages from the local outbox."""
+    sent_command(swarm_id, limit, count, json_flag)
 
 
 @app.command("messages")
