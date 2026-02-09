@@ -254,7 +254,8 @@ class TestInboxRepository:
         assert updated == 0
 
     @pytest.mark.asyncio
-    async def test_purge_deleted(self, db: DatabaseManager) -> None:
+    async def test_purge_deleted_all(self, db: DatabaseManager) -> None:
+        """purge_deleted() without retention purges everything."""
         async with db.connection() as conn:
             repo = InboxRepository(conn)
             for i in range(3):
@@ -267,6 +268,51 @@ class TestInboxRepository:
         assert purged == 2
         assert remaining is None
         assert kept is not None
+
+    @pytest.mark.asyncio
+    async def test_purge_deleted_with_retention(
+        self, db: DatabaseManager,
+    ) -> None:
+        """purge_deleted(older_than_hours=1) preserves recent deletions."""
+        async with db.connection() as conn:
+            repo = InboxRepository(conn)
+            # Insert and delete messages
+            for i in range(3):
+                await repo.insert(_msg(msg_id=f"msg-{i}"))
+            await repo.mark_deleted("msg-0")
+            await repo.mark_deleted("msg-1")
+
+            # Backdate msg-0 deletion to 2 hours ago
+            old_time = (
+                datetime.now(timezone.utc) - timedelta(hours=2)
+            ).isoformat()
+            await conn.execute(
+                "UPDATE inbox SET deleted_at = ? WHERE message_id = ?",
+                (old_time, "msg-0"),
+            )
+            await conn.commit()
+
+            # Purge with 1h retention: only msg-0 should be purged
+            purged = await repo.purge_deleted(older_than_hours=1)
+            msg0 = await repo.get_by_id("msg-0")
+            msg1 = await repo.get_by_id("msg-1")
+            msg2 = await repo.get_by_id("msg-2")
+        assert purged == 1
+        assert msg0 is None
+        assert msg1 is not None  # recently deleted, kept
+        assert msg2 is not None  # not deleted
+
+    @pytest.mark.asyncio
+    async def test_mark_deleted_sets_deleted_at(
+        self, db: DatabaseManager,
+    ) -> None:
+        """mark_deleted sets the deleted_at timestamp."""
+        async with db.connection() as conn:
+            repo = InboxRepository(conn)
+            await repo.insert(_msg())
+            await repo.mark_deleted("msg-001")
+            result = await repo.get_by_id("msg-001")
+        assert result.deleted_at is not None
 
     @pytest.mark.asyncio
     async def test_insert_with_recipient(self, db: DatabaseManager) -> None:

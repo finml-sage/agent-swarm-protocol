@@ -28,6 +28,7 @@ class InboxMessage:
         received_at: When the message was received.
         status: Current inbox status.
         read_at: When the message was marked as read.
+        deleted_at: When the message was soft-deleted.
     """
 
     message_id: str
@@ -39,6 +40,7 @@ class InboxMessage:
     status: InboxStatus = InboxStatus.UNREAD
     recipient_id: Optional[str] = None
     read_at: Optional[datetime] = None
+    deleted_at: Optional[datetime] = None
 
     def __post_init__(self) -> None:
         """Validate required fields."""

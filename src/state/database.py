@@ -31,6 +31,7 @@ class DatabaseManager:
             await conn.executescript(_SCHEMA)
             await conn.commit()
             await _migrate_to_2_0_0(conn)
+            await _migrate_to_2_1_0(conn)
         self._initialized = True
 
     @asynccontextmanager
@@ -89,6 +90,32 @@ async def _migrate_to_2_0_0(conn: aiosqlite.Connection) -> None:
     await conn.commit()
 
 
+async def _migrate_to_2_1_0(conn: aiosqlite.Connection) -> None:
+    """Migrate from 2.0.0 to 2.1.0: add deleted_at column to inbox.
+
+    Idempotent -- checks schema_versions before running.  Also checks
+    whether the column already exists (e.g. fresh databases created with
+    the updated DDL).
+    """
+    cursor = await conn.execute(
+        "SELECT 1 FROM schema_versions WHERE version = '2.1.0'"
+    )
+    if await cursor.fetchone() is not None:
+        return
+
+    # Check if deleted_at column already exists (fresh DB has it in DDL)
+    col_cursor = await conn.execute("PRAGMA table_info(inbox)")
+    columns = {row[1] for row in await col_cursor.fetchall()}
+    if "deleted_at" not in columns:
+        await conn.execute("ALTER TABLE inbox ADD COLUMN deleted_at TEXT")
+
+    await conn.execute(
+        "INSERT OR IGNORE INTO schema_versions (version, applied_at) "
+        "VALUES ('2.1.0', datetime('now'))"
+    )
+    await conn.commit()
+
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_versions (version TEXT PRIMARY KEY, applied_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS swarms (swarm_id TEXT PRIMARY KEY, name TEXT NOT NULL CHECK(length(name) <= 256), master TEXT NOT NULL, joined_at TEXT NOT NULL, allow_member_invite INTEGER NOT NULL DEFAULT 0, require_approval INTEGER NOT NULL DEFAULT 0);
@@ -115,6 +142,7 @@ CREATE TABLE IF NOT EXISTS inbox (
     content      TEXT NOT NULL,
     received_at  TEXT NOT NULL,
     read_at      TEXT,
+    deleted_at   TEXT,
     status       TEXT NOT NULL DEFAULT 'unread',
     CHECK(status IN ('unread', 'read', 'archived', 'deleted'))
 );

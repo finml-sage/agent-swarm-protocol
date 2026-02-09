@@ -112,7 +112,7 @@ class TestMigration:
             await conn.execute(
                 "INSERT INTO inbox VALUES "
                 "('msg-test', 'swarm-1', 'sender-1', NULL, 'message', "
-                "'content', '2026-01-01T00:00:00+00:00', NULL, 'unread')"
+                "'content', '2026-01-01T00:00:00+00:00', NULL, NULL, 'unread')"
             )
             await conn.commit()
 

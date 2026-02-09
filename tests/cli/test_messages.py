@@ -177,6 +177,16 @@ class TestMessagesWithoutInit:
         assert result.exit_code == 1
         assert "swarm init" in result.stdout.lower()
 
+    def test_messages_ack_without_init(self, monkeypatch):
+        with TemporaryDirectory() as tmpdir:
+            config_dir = Path(tmpdir) / "swarm"
+            monkeypatch.setattr(ConfigManager, "DEFAULT_DIR", config_dir)
+
+            result = runner.invoke(app, ["messages", "--ack", MSG_ID])
+
+        assert result.exit_code == 1
+        assert "swarm init" in result.stdout.lower()
+
 
 # ---------------------------------------------------------------------------
 # List mode tests (mocking HTTP calls)
@@ -389,6 +399,78 @@ class TestMessagesCount:
 
 
 # ---------------------------------------------------------------------------
+# Ack mode tests
+# ---------------------------------------------------------------------------
+
+
+class TestMessagesAck:
+    """Messages --ack mode tests."""
+
+    @patch("src.cli.commands.messages._ack_message", new_callable=AsyncMock)
+    @patch("src.cli.commands.messages._load_base_url", return_value=BASE_URL)
+    def test_ack_success(self, mock_url, mock_ack, monkeypatch):
+        """Ack marks message as completed."""
+        mock_ack.return_value = {"status": "acked", "message_id": MSG_ID}
+
+        with TemporaryDirectory() as tmpdir:
+            config_dir = Path(tmpdir) / "swarm"
+            _init_agent(monkeypatch, config_dir)
+
+            result = runner.invoke(app, ["messages", "--ack", MSG_ID])
+
+        assert result.exit_code == 0
+        assert "completed" in result.stdout
+
+    @patch("src.cli.commands.messages._ack_message", new_callable=AsyncMock)
+    @patch("src.cli.commands.messages._load_base_url", return_value=BASE_URL)
+    def test_ack_not_found(self, mock_url, mock_ack, monkeypatch):
+        """Ack with unknown message ID fails with exit 5."""
+        mock_ack.return_value = {"status": "not_found", "message_id": MSG_ID}
+
+        with TemporaryDirectory() as tmpdir:
+            config_dir = Path(tmpdir) / "swarm"
+            _init_agent(monkeypatch, config_dir)
+
+            result = runner.invoke(app, ["messages", "--ack", MSG_ID])
+
+        assert result.exit_code == 5
+        assert "not found" in result.stdout
+
+    @patch("src.cli.commands.messages._ack_message", new_callable=AsyncMock)
+    @patch("src.cli.commands.messages._load_base_url", return_value=BASE_URL)
+    def test_ack_json_success(self, mock_url, mock_ack, monkeypatch):
+        """Ack with --json outputs valid JSON."""
+        mock_ack.return_value = {"status": "acked", "message_id": MSG_ID}
+
+        with TemporaryDirectory() as tmpdir:
+            config_dir = Path(tmpdir) / "swarm"
+            _init_agent(monkeypatch, config_dir)
+
+            result = runner.invoke(app, ["messages", "--ack", MSG_ID, "--json"])
+
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["status"] == "acked"
+        assert data["message_id"] == MSG_ID
+
+    @patch("src.cli.commands.messages._ack_message", new_callable=AsyncMock)
+    @patch("src.cli.commands.messages._load_base_url", return_value=BASE_URL)
+    def test_ack_json_not_found(self, mock_url, mock_ack, monkeypatch):
+        """Ack --json with unknown ID returns not_found status."""
+        mock_ack.return_value = {"status": "not_found", "message_id": MSG_ID}
+
+        with TemporaryDirectory() as tmpdir:
+            config_dir = Path(tmpdir) / "swarm"
+            _init_agent(monkeypatch, config_dir)
+
+            result = runner.invoke(app, ["messages", "--ack", MSG_ID, "--json"])
+
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["status"] == "not_found"
+
+
+# ---------------------------------------------------------------------------
 # Archive mode tests
 # ---------------------------------------------------------------------------
 
@@ -469,7 +551,7 @@ class TestMessagesDelete:
     @patch("src.cli.commands.messages._delete_message", new_callable=AsyncMock)
     @patch("src.cli.commands.messages._load_base_url", return_value=BASE_URL)
     def test_delete_not_found(self, mock_url, mock_delete, monkeypatch):
-        """Delete with unknown message ID fails with exit 5."""
+        """Delete with unknown message ID fails with exit 1."""
         mock_delete.return_value = {"error": f"Message {MSG_ID} not found"}
 
         with TemporaryDirectory() as tmpdir:
@@ -478,8 +560,7 @@ class TestMessagesDelete:
 
             result = runner.invoke(app, ["messages", "--delete", MSG_ID])
 
-        assert result.exit_code == 5
-        assert "not found" in result.stdout
+        assert result.exit_code == 1
 
     @patch("src.cli.commands.messages._delete_message", new_callable=AsyncMock)
     @patch("src.cli.commands.messages._load_base_url", return_value=BASE_URL)
@@ -496,3 +577,124 @@ class TestMessagesDelete:
         assert result.exit_code == 0
         data = json.loads(result.stdout)
         assert data["status"] == "deleted"
+
+
+# ---------------------------------------------------------------------------
+# Archive-all mode tests
+# ---------------------------------------------------------------------------
+
+
+class TestMessagesArchiveAll:
+    """Messages --archive-all mode tests."""
+
+    def test_archive_all_requires_swarm_id(self, monkeypatch):
+        """--archive-all without --swarm exits with code 2."""
+        with TemporaryDirectory() as tmpdir:
+            config_dir = Path(tmpdir) / "swarm"
+            _init_agent(monkeypatch, config_dir)
+
+            result = runner.invoke(app, ["messages", "--archive-all"])
+
+        assert result.exit_code == 2
+        assert "Swarm ID is required" in result.stdout
+
+    @patch("src.cli.commands.messages._batch_inbox_action", new_callable=AsyncMock)
+    @patch("src.cli.commands.messages._fetch_inbox", new_callable=AsyncMock)
+    @patch("src.cli.commands.messages._load_base_url", return_value=BASE_URL)
+    def test_archive_all_success(
+        self, mock_url, mock_fetch, mock_batch, monkeypatch,
+    ):
+        """--archive-all archives read messages."""
+        mock_fetch.return_value = {
+            "count": 2,
+            "messages": [
+                {"message_id": "msg-1", "sender_id": "a", "status": "read",
+                 "received_at": "2026-02-09T12:00:00", "content_preview": "hi"},
+                {"message_id": "msg-2", "sender_id": "b", "status": "read",
+                 "received_at": "2026-02-09T12:01:00", "content_preview": "yo"},
+            ],
+        }
+        mock_batch.return_value = {"action": "archive", "updated": 2, "total": 2}
+
+        with TemporaryDirectory() as tmpdir:
+            config_dir = Path(tmpdir) / "swarm"
+            _init_agent(monkeypatch, config_dir)
+
+            result = runner.invoke(
+                app, ["messages", "--archive-all", "-s", SWARM_ID]
+            )
+
+        assert result.exit_code == 0
+        assert "Archived 2 of 2" in result.stdout
+        mock_batch.assert_called_once()
+        call_args = mock_batch.call_args
+        assert call_args[0][1] == ["msg-1", "msg-2"]
+        assert call_args[0][2] == "archive"
+
+    @patch("src.cli.commands.messages._fetch_inbox", new_callable=AsyncMock)
+    @patch("src.cli.commands.messages._load_base_url", return_value=BASE_URL)
+    def test_archive_all_no_read_messages(
+        self, mock_url, mock_fetch, monkeypatch,
+    ):
+        """--archive-all with no read messages shows info."""
+        mock_fetch.return_value = {"count": 0, "messages": []}
+
+        with TemporaryDirectory() as tmpdir:
+            config_dir = Path(tmpdir) / "swarm"
+            _init_agent(monkeypatch, config_dir)
+
+            result = runner.invoke(
+                app, ["messages", "--archive-all", "-s", SWARM_ID]
+            )
+
+        assert result.exit_code == 0
+        assert "No read messages to archive" in result.stdout
+
+    @patch("src.cli.commands.messages._batch_inbox_action", new_callable=AsyncMock)
+    @patch("src.cli.commands.messages._fetch_inbox", new_callable=AsyncMock)
+    @patch("src.cli.commands.messages._load_base_url", return_value=BASE_URL)
+    def test_archive_all_json(
+        self, mock_url, mock_fetch, mock_batch, monkeypatch,
+    ):
+        """--archive-all --json outputs batch response."""
+        mock_fetch.return_value = {
+            "count": 1,
+            "messages": [
+                {"message_id": "msg-1", "sender_id": "a", "status": "read",
+                 "received_at": "2026-02-09T12:00:00", "content_preview": "hi"},
+            ],
+        }
+        mock_batch.return_value = {"action": "archive", "updated": 1, "total": 1}
+
+        with TemporaryDirectory() as tmpdir:
+            config_dir = Path(tmpdir) / "swarm"
+            _init_agent(monkeypatch, config_dir)
+
+            result = runner.invoke(
+                app, ["messages", "--archive-all", "-s", SWARM_ID, "--json"]
+            )
+
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["action"] == "archive"
+        assert data["updated"] == 1
+
+    @patch("src.cli.commands.messages._fetch_inbox", new_callable=AsyncMock)
+    @patch("src.cli.commands.messages._load_base_url", return_value=BASE_URL)
+    def test_archive_all_empty_json(
+        self, mock_url, mock_fetch, monkeypatch,
+    ):
+        """--archive-all --json with no messages returns zero counts."""
+        mock_fetch.return_value = {"count": 0, "messages": []}
+
+        with TemporaryDirectory() as tmpdir:
+            config_dir = Path(tmpdir) / "swarm"
+            _init_agent(monkeypatch, config_dir)
+
+            result = runner.invoke(
+                app, ["messages", "--archive-all", "-s", SWARM_ID, "--json"]
+            )
+
+        assert result.exit_code == 0
+        data = json.loads(result.stdout)
+        assert data["updated"] == 0
