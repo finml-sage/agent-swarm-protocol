@@ -12,6 +12,7 @@ from src.cli.commands.join import join_command
 from src.cli.commands.kick import kick_command
 from src.cli.commands.leave import leave_command
 from src.cli.commands.list_swarms import list_command
+from src.cli.commands.messages import messages_command
 from src.cli.commands.mute import mute_command
 from src.cli.commands.purge import purge_command
 from src.cli.commands.send import send_command
@@ -127,6 +128,19 @@ def send(
 ) -> None:
     """Send a message to a swarm."""
     send_command(swarm_id, message, to, json_flag)
+
+
+@app.command("messages")
+def messages(
+    swarm_id: str = typer.Option(None, "-s", "--swarm", help="Swarm ID"),
+    limit: int = typer.Option(10, "-l", "--limit", help="Max messages to show"),
+    show_all: bool = typer.Option(False, "--all", help="Show all statuses"),
+    ack: str = typer.Option(None, "--ack", help="Mark message as completed"),
+    count: bool = typer.Option(False, "--count", help="Show pending count only"),
+    json_flag: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """List and manage received messages."""
+    messages_command(swarm_id, limit, show_all, ack, count, json_flag)
 
 
 @app.command("mute")
