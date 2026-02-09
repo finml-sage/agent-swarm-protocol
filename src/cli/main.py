@@ -4,6 +4,7 @@ import typer
 from rich.console import Console
 
 from src.cli.commands.create import create_command
+from src.cli.commands.import_state import import_command
 from src.cli.commands.init import init_command
 from src.cli.commands.invite import invite_command
 from src.cli.commands.join import join_command
@@ -137,6 +138,17 @@ def status(
 ) -> None:
     """Show agent configuration and status."""
     status_command(verbose, json_flag)
+
+
+@app.command("import")
+def import_state_cmd(
+    input_path: str = typer.Option(..., "-i", "--input", help="JSON file to import"),
+    merge: bool = typer.Option(False, "--merge", help="Merge with existing state"),
+    yes: bool = typer.Option(False, "-y", "--yes", help="Skip confirmation"),
+    json_flag: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Import agent state from a JSON file."""
+    import_command(input_path, merge, yes, json_flag)
 
 
 def main() -> None:

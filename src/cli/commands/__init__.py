@@ -2,6 +2,7 @@
 
 from . import (
     create,
+    import_state,
     init,
     invite,
     join,
@@ -16,6 +17,7 @@ from . import (
 
 __all__ = [
     "create",
+    "import_state",
     "init",
     "invite",
     "join",
