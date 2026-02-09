@@ -5,6 +5,7 @@ from src.server.routes.health import create_health_router
 from src.server.routes.info import create_info_router
 from src.server.routes.wake import create_wake_router
 from src.server.routes.inbox import create_inbox_router
+from src.server.routes.outbox import create_outbox_router
 __all__ = [
     "create_message_router",
     "create_join_router",
@@ -12,4 +13,5 @@ __all__ = [
     "create_info_router",
     "create_wake_router",
     "create_inbox_router",
+    "create_outbox_router",
 ]

@@ -9,8 +9,8 @@ from fastapi import APIRouter, Request, status
 from src.server.models.requests import MessageRequest
 from src.server.models.responses import MessageQueuedResponse
 from src.state.database import DatabaseManager
-from src.state.models.message import QueuedMessage
-from src.state.repositories.messages import MessageRepository
+from src.state.models.inbox import InboxMessage, InboxStatus
+from src.state.repositories.inbox import InboxRepository
 from src.claude.wake_trigger import WakeTrigger
 
 logger = logging.getLogger(__name__)
@@ -37,18 +37,20 @@ def create_message_router(db: DatabaseManager) -> APIRouter:
         After persistence, the wake trigger (if configured) evaluates
         whether to WAKE, QUEUE, or SKIP the message.
         """
-        message = QueuedMessage(
+        inbox_msg = InboxMessage(
             message_id=body.message_id,
             swarm_id=body.swarm_id,
             sender_id=body.sender.agent_id,
+            recipient_id=body.recipient,
             message_type=body.type,
             content=body.model_dump_json(),
             received_at=datetime.now(timezone.utc),
+            status=InboxStatus.UNREAD,
         )
         async with db.connection() as conn:
-            repo = MessageRepository(conn)
+            repo = InboxRepository(conn)
             try:
-                await repo.enqueue(message)
+                await repo.insert(inbox_msg)
             except sqlite3.IntegrityError:
                 logger.debug(
                     "Duplicate message %s ignored (idempotent)",
@@ -63,7 +65,7 @@ def create_message_router(db: DatabaseManager) -> APIRouter:
         )
         if wake_trigger is not None:
             try:
-                event = await wake_trigger.process_message(message)
+                event = await wake_trigger.process_message(inbox_msg)
                 logger.info(
                     "Wake trigger: message=%s decision=%s",
                     body.message_id,

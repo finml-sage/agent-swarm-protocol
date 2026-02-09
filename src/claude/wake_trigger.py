@@ -2,16 +2,18 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Callable, Awaitable
+from typing import Callable, Awaitable, Union
 import logging
 
 import httpx
 
-from src.state import DatabaseManager, QueuedMessage
+from src.state import DatabaseManager, QueuedMessage, InboxMessage
 from src.claude.notification_preferences import NotificationPreferences, NotificationLevel
 from src.claude.context_loader import ContextLoader, SwarmContext
 
 logger = logging.getLogger(__name__)
+
+AnyMessage = Union[QueuedMessage, InboxMessage]
 
 
 class WakeDecision(Enum):
@@ -24,7 +26,7 @@ class WakeDecision(Enum):
 @dataclass(frozen=True)
 class WakeEvent:
     """Event that may trigger a wake."""
-    message: QueuedMessage
+    message: AnyMessage
     context: SwarmContext
     decision: WakeDecision
     notification_level: NotificationLevel
@@ -59,7 +61,7 @@ class WakeTrigger:
         """Register callback for wake events."""
         self._callbacks.append(callback)
 
-    async def process_message(self, message: QueuedMessage) -> WakeEvent:
+    async def process_message(self, message: AnyMessage) -> WakeEvent:
         """Process incoming message and determine wake action."""
         context = await self._context_loader.load_context(message)
         decision = self._make_decision(context)

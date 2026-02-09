@@ -11,10 +11,15 @@ from src.server.models.responses import (
     ErrorResponse,
 )
 from src.server.models.inbox import (
-    InboxMessage,
+    InboxMessageResponse,
     InboxListResponse,
     InboxCountResponse,
-    InboxAckResponse,
+    InboxStatusResponse,
+    InboxBatchRequest,
+    InboxBatchResponse,
+    OutboxMessageResponse,
+    OutboxListResponse,
+    OutboxCountResponse,
 )
 
 __all__ = [
@@ -30,8 +35,13 @@ __all__ = [
     "AgentInfoResponse",
     "ErrorDetail",
     "ErrorResponse",
-    "InboxMessage",
+    "InboxMessageResponse",
     "InboxListResponse",
     "InboxCountResponse",
-    "InboxAckResponse",
+    "InboxStatusResponse",
+    "InboxBatchRequest",
+    "InboxBatchResponse",
+    "OutboxMessageResponse",
+    "OutboxListResponse",
+    "OutboxCountResponse",
 ]

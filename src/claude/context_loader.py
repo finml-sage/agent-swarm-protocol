@@ -1,7 +1,7 @@
 """Context loader for Claude subagent message processing."""
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Union
 
 from src.state import (
     DatabaseManager,
@@ -10,6 +10,7 @@ from src.state import (
     MuteRepository,
     SwarmMembership,
     QueuedMessage,
+    InboxMessage,
 )
 
 
@@ -35,6 +36,27 @@ class MessageContext:
             content=msg.content,
             received_at=msg.received_at,
         )
+
+    @classmethod
+    def from_inbox(cls, msg: InboxMessage) -> "MessageContext":
+        """Create MessageContext from an InboxMessage."""
+        return cls(
+            message_id=msg.message_id,
+            swarm_id=msg.swarm_id,
+            sender_id=msg.sender_id,
+            message_type=msg.message_type,
+            content=msg.content,
+            received_at=msg.received_at,
+        )
+
+    @classmethod
+    def from_message(
+        cls, msg: Union[QueuedMessage, InboxMessage],
+    ) -> "MessageContext":
+        """Create MessageContext from either message type."""
+        if isinstance(msg, InboxMessage):
+            return cls.from_inbox(msg)
+        return cls.from_queued(msg)
 
 
 @dataclass(frozen=True)
@@ -63,18 +85,17 @@ class ContextLoader:
 
     async def load_context(
         self,
-        message: QueuedMessage,
+        message: Union[QueuedMessage, InboxMessage],
         recent_limit: int = 10,
     ) -> SwarmContext:
-        """
-        Load full context for processing a message.
+        """Load full context for processing a message.
 
         Args:
-            message: The queued message to process
-            recent_limit: Max number of recent messages to include
+            message: The queued or inbox message to process.
+            recent_limit: Max number of recent messages to include.
 
         Returns:
-            SwarmContext with message, membership, and mute state
+            SwarmContext with message, membership, and mute state.
         """
         async with self._db.connection() as conn:
             membership_repo = MembershipRepository(conn)
@@ -93,7 +114,7 @@ class ContextLoader:
             )
 
         return SwarmContext(
-            message=MessageContext.from_queued(message),
+            message=MessageContext.from_message(message),
             swarm=swarm,
             recent_messages=recent,
             is_sender_muted=is_sender_muted,

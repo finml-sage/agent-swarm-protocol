@@ -1,4 +1,4 @@
-"""Integration tests: messages received via HTTP are persisted to SQLite."""
+"""Integration tests: messages received via HTTP are persisted to inbox."""
 import asyncio
 import json
 from pathlib import Path
@@ -11,7 +11,8 @@ from src.server.config import (
     AgentConfig, RateLimitConfig, ServerConfig, WakeConfig, WakeEndpointConfig,
 )
 from src.state.database import DatabaseManager
-from src.state.repositories.messages import MessageRepository
+from src.state.models.inbox import InboxStatus
+from src.state.repositories.inbox import InboxRepository
 
 
 def _make_config(tmp_path: Path) -> ServerConfig:
@@ -53,10 +54,10 @@ def _valid_message(message_id: str = "550e8400-e29b-41d4-a716-446655440000") -> 
 
 
 class TestMessagePersistence:
-    """Verify that POST /swarm/message stores rows in message_queue."""
+    """Verify that POST /swarm/message stores rows in the inbox table."""
 
-    def test_message_persisted_to_sqlite(self, tmp_path: Path) -> None:
-        """A valid message is stored in the message_queue table."""
+    def test_message_persisted_to_inbox(self, tmp_path: Path) -> None:
+        """A valid message is stored in the inbox table with status 'unread'."""
         config = _make_config(tmp_path)
         msg = _valid_message()
 
@@ -70,18 +71,20 @@ class TestMessagePersistence:
         assert response.status_code == 200
         assert response.json()["status"] == "queued"
 
-        # Read back from the database directly
+        # Read back from the inbox table directly
         async def _verify() -> None:
             db = DatabaseManager(config.db_path)
             await db.initialize()
             async with db.connection() as conn:
-                repo = MessageRepository(conn)
+                repo = InboxRepository(conn)
                 stored = await repo.get_by_id(msg["message_id"])
             assert stored is not None
             assert stored.message_id == msg["message_id"]
             assert stored.swarm_id == msg["swarm_id"]
             assert stored.sender_id == msg["sender"]["agent_id"]
             assert stored.message_type == msg["type"]
+            assert stored.status == InboxStatus.UNREAD
+            assert stored.recipient_id == msg["recipient"]
             # content stores the full JSON payload
             payload = json.loads(stored.content)
             assert payload["content"] == "Hello from integration test"
@@ -134,14 +137,14 @@ class TestMessagePersistence:
             db = DatabaseManager(config.db_path)
             await db.initialize()
             async with db.connection() as conn:
-                repo = MessageRepository(conn)
+                repo = InboxRepository(conn)
                 for mid in ids:
                     stored = await repo.get_by_id(mid)
-                    assert stored is not None, f"Message {mid} not found in DB"
-                count = await repo.get_pending_count(
+                    assert stored is not None, f"Message {mid} not found in inbox"
+                counts = await repo.count_by_status(
                     "660e8400-e29b-41d4-a716-446655440001"
                 )
-            assert count == 3
+            assert counts["unread"] == 3
             await db.close()
 
         asyncio.run(_verify())
