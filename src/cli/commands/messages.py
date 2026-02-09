@@ -9,12 +9,15 @@ from src.cli.output import format_error, format_success, format_table, json_outp
 from src.cli.utils import ConfigManager, validate_swarm_id
 from src.cli.utils.config import ConfigError
 from src.state import DatabaseManager, MessageRepository
+from src.state.models.message import MessageStatus
 
 console = Console()
 
+_VALID_STATUSES = ("pending", "completed", "failed", "all")
+
 
 async def _db_repo():
-    """Return an initialized MessageRepository with its connection context."""
+    """Return an initialized DatabaseManager."""
     config = ConfigManager()
     agent_config = config.load()
     db = DatabaseManager(agent_config.db_path)
@@ -22,28 +25,17 @@ async def _db_repo():
     return db
 
 
-async def _list_messages(swarm_id_str: str, limit: int, show_all: bool) -> list[dict]:
-    """Fetch messages from queue."""
+async def _list_messages(swarm_id_str: str, limit: int, status_filter: str) -> list[dict]:
+    """Fetch messages from queue via repository layer."""
     db = await _db_repo()
     async with db.connection() as conn:
-        if show_all:
-            cursor = await conn.execute(
-                "SELECT * FROM message_queue WHERE swarm_id = ? "
-                "ORDER BY received_at DESC LIMIT ?",
-                (swarm_id_str, min(limit, 100)),
-            )
-            rows = await cursor.fetchall()
-            return [_row_dict(r) for r in rows]
         repo = MessageRepository(conn)
-        return [_msg_dict(m) for m in await repo.get_recent(swarm_id_str, limit)]
-
-
-def _row_dict(r) -> dict:
-    return {
-        "message_id": r["message_id"], "sender_id": r["sender_id"],
-        "message_type": r["message_type"], "status": r["status"],
-        "received_at": r["received_at"], "content_preview": r["content"][:200],
-    }
+        if status_filter == "all":
+            messages = await repo.list_by_status(swarm_id_str, status=None, limit=limit)
+        else:
+            ms = MessageStatus(status_filter)
+            messages = await repo.list_by_status(swarm_id_str, status=ms, limit=limit)
+        return [_msg_dict(m) for m in messages]
 
 
 def _msg_dict(m) -> dict:
@@ -81,7 +73,7 @@ def _run_async(coro, error_label: str):
 
 
 def messages_command(
-    swarm_id: str | None, limit: int, show_all: bool,
+    swarm_id: str | None, limit: int, status_filter: str,
     ack: str | None, count: bool, json_flag: bool,
 ) -> None:
     """List and manage messages."""
@@ -96,6 +88,13 @@ def messages_command(
             format_error(console, f"Message {ack} not found")
             raise typer.Exit(code=5)
         return
+
+    if status_filter not in _VALID_STATUSES:
+        format_error(
+            console, f"Invalid status '{status_filter}'",
+            hint=f"Valid values: {', '.join(_VALID_STATUSES)}",
+        )
+        raise typer.Exit(code=2)
 
     if not swarm_id:
         format_error(console, "Swarm ID is required for listing messages",
@@ -116,7 +115,7 @@ def messages_command(
             console.print(f"[cyan]Pending messages:[/cyan] {pending}")
         return
 
-    msgs = _run_async(_list_messages(sid, limit, show_all), "list messages")
+    msgs = _run_async(_list_messages(sid, limit, status_filter), "list messages")
     if json_flag:
         json_output(console, {"swarm_id": sid, "count": len(msgs), "messages": msgs})
         return

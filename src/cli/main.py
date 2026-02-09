@@ -134,13 +134,15 @@ def send(
 def messages(
     swarm_id: str = typer.Option(None, "-s", "--swarm", help="Swarm ID"),
     limit: int = typer.Option(10, "-l", "--limit", help="Max messages to show"),
-    show_all: bool = typer.Option(False, "--all", help="Show all statuses"),
+    status_filter: str = typer.Option(
+        "pending", "--status", help="Filter by status: pending|completed|failed|all",
+    ),
     ack: str = typer.Option(None, "--ack", help="Mark message as completed"),
     count: bool = typer.Option(False, "--count", help="Show pending count only"),
     json_flag: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """List and manage received messages."""
-    messages_command(swarm_id, limit, show_all, ack, count, json_flag)
+    messages_command(swarm_id, limit, status_filter, ack, count, json_flag)
 
 
 @app.command("mute")
