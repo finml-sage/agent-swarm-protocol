@@ -1,4 +1,10 @@
-"""Message queue repository."""
+"""Message queue repository.
+
+.. deprecated:: 2.0.0
+    Replaced by :mod:`src.state.repositories.inbox` and
+    :mod:`src.state.repositories.outbox`.  Kept during migration period;
+    will be removed once all consumers switch to inbox/outbox.
+"""
 import aiosqlite
 from datetime import datetime, timedelta, timezone
 from typing import Optional
