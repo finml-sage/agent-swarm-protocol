@@ -262,7 +262,7 @@ The template provides:
 - Rate limiting per agent and per IP
 - Security headers (HSTS, X-Frame-Options, etc.)
 - Proxy to uvicorn on 127.0.0.1:8080
-- Location blocks for `/swarm/message`, `/swarm/join`, `/swarm/health`, `/swarm/info`, and `/api/wake`
+- Location blocks for `/swarm/message`, `/swarm/join`, `/swarm/health`, `/swarm/info`, `/api/wake`, `/api/inbox`, and `/api/outbox`
 
 ## Step 8: Start Services
 
@@ -347,6 +347,108 @@ docker compose cp handler:/app/data/swarm.db /tmp/container-swarm.db
 docker compose down -v   # Remove volumes
 docker system prune -f   # Clean up
 ```
+
+## Deploying Updates
+
+After PRs merge into `main`, deploy the new code to the live server. Use the automated deploy script or follow the manual steps below.
+
+### Automated Deploy (Recommended)
+
+```bash
+cd /opt/sage/agent-swarm-protocol
+
+# Standard deploy: pull, install, test, restart, health check
+scripts/deploy.sh
+
+# Deploy with Angie config drift check + sync attempt
+scripts/deploy.sh --sync-angie
+
+# Preview what would happen without making changes
+scripts/deploy.sh --dry-run
+
+# Skip tests (use with caution, e.g. when tests are known-broken upstream)
+scripts/deploy.sh --skip-tests
+```
+
+The script is idempotent and safe to run repeatedly. It will:
+
+1. `git pull origin main`
+2. `pip install -e ".[dev,wake]"` (picks up new dependencies)
+3. `pytest -x -q` (fail-fast; aborts deploy on test failure)
+4. Check Angie config drift (compares template location blocks against live config)
+5. Optionally sync Angie config (with `--sync-angie`)
+6. `systemctl restart swarm-agent`
+7. Health check with retries (`curl http://127.0.0.1:8081/swarm/health`)
+
+**Environment overrides** (all optional):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `REPO_DIR` | `/opt/sage/agent-swarm-protocol` | Repository root |
+| `LIVE_CONF` | `/etc/angie/http.d/self-wake.conf` | Live Angie config path |
+| `SERVICE_NAME` | `swarm-agent` | systemd service name |
+| `HEALTH_URL` | `http://127.0.0.1:8081/swarm/health` | Health check endpoint |
+| `HEALTH_RETRIES` | `5` | Number of health check attempts |
+| `HEALTH_DELAY` | `2` | Seconds between health check retries |
+
+### Manual Deploy (Fallback)
+
+If the deploy script is unavailable or you need fine-grained control:
+
+```bash
+cd /opt/sage/agent-swarm-protocol
+
+# 1. Pull latest code
+git pull origin main
+
+# 2. Install dependencies (in venv)
+./venv/bin/pip install -e ".[dev,wake]"
+
+# 3. Run tests
+./venv/bin/pytest -x -q
+
+# 4. Check Angie config drift
+#    Compare location blocks in the template against the live config:
+diff <(grep -E '^\s*location\s' src/server/angie.conf.template | sed 's/^[[:space:]]*//' | sort) \
+     <(grep -E '^\s*location\s' /etc/angie/http.d/self-wake.conf | sed 's/^[[:space:]]*//' | sort)
+#    If there are differences, add missing location blocks to the live config.
+
+# 5. If Angie config was changed:
+angie -t && systemctl reload angie
+
+# 6. Restart the service
+systemctl restart swarm-agent
+
+# 7. Verify
+sleep 2
+curl -sf http://127.0.0.1:8081/swarm/health && echo "OK" || echo "FAILED"
+systemctl status swarm-agent --no-pager
+```
+
+### Angie Config Drift
+
+The Angie config template (`src/server/angie.conf.template`) and the live server config (`/etc/angie/http.d/self-wake.conf`) have **different structures**:
+
+| Aspect | Template | Live Config |
+|--------|----------|-------------|
+| Scope | Full standalone config (`worker_processes`, `events {}`, `http {}`) | Server-block include (loaded by Angie's `http {}` context) |
+| Upstream | `swarm_backend` only | `selfwake_backend` + `swarm_backend` |
+| Extra routes | None | `/content/`, `/health`, status page at `/` |
+| Variables | `{{DOMAIN}}`, `{{UPSTREAM_PORT}}` placeholders | Hardcoded values |
+
+**Why they differ**: The live server hosts multiple services (self-wake daemon, static content, swarm protocol) behind a single Angie instance. The template is designed as a reference for new single-service deployments.
+
+**What drifts**: When PRs add new `location` blocks to the template (e.g., `/api/inbox`, `/api/outbox`), those blocks must be manually added to the live config. The deploy script detects this drift and warns you.
+
+**How to fix drift**:
+
+1. Run `scripts/deploy.sh` -- it will list missing location blocks
+2. Open `/etc/angie/http.d/self-wake.conf` in an editor
+3. Add the missing location blocks inside the `server { }` block
+4. Validate: `angie -t`
+5. Reload: `systemctl reload angie`
+
+This pattern has caused failures three times (PRs #75, #88, #152/#161). The deploy script's drift detection prevents silent 404 failures on new routes.
 
 ## Troubleshooting
 
