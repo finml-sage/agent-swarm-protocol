@@ -3,7 +3,7 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import typer
 from rich.console import Console
@@ -65,7 +65,7 @@ async def _send_message(swarm_id: UUID, content: str, recipient: str | None) -> 
 
     try:
         outbox_msg = OutboxMessage(
-            message_id=str(uuid4()),
+            message_id=str(msg.message_id),
             swarm_id=str(swarm_id),
             recipient_id=target,
             message_type="message",
