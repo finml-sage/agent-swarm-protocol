@@ -12,6 +12,7 @@ from src.cli.commands.kick import kick_command
 from src.cli.commands.leave import leave_command
 from src.cli.commands.list_swarms import list_command
 from src.cli.commands.mute import mute_command
+from src.cli.commands.purge import purge_command
 from src.cli.commands.send import send_command
 from src.cli.commands.status import status_command
 from src.cli.commands.unmute import unmute_command
@@ -97,6 +98,23 @@ def list_swarms(
 ) -> None:
     """List swarms this agent belongs to."""
     list_command(swarm_id, members, json_flag)
+
+
+@app.command("purge")
+def purge(
+    messages: bool = typer.Option(False, "--messages", help="Purge old messages"),
+    sessions: bool = typer.Option(False, "--sessions", help="Purge expired sessions"),
+    retention_days: int = typer.Option(
+        30, "--retention-days", help="Message retention (days)"
+    ),
+    timeout_minutes: int = typer.Option(
+        60, "--timeout-minutes", help="Session timeout (minutes)"
+    ),
+    yes: bool = typer.Option(False, "-y", "--yes", help="Skip confirmation"),
+    json_flag: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Purge old messages and expired sessions."""
+    purge_command(messages, sessions, retention_days, timeout_minutes, yes, json_flag)
 
 
 @app.command("send")
