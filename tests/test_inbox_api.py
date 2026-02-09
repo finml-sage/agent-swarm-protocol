@@ -119,6 +119,17 @@ class TestInboxList:
         for field in ("message_id", "swarm_id", "sender_id", "message_type", "status", "received_at", "content_preview"):
             assert field in msg
 
+    def test_list_by_sender(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        """sender_id filter returns only messages from that sender."""
+        db_path = tmp_path / "list_sender.db"
+        _seed_inbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.get("/api/inbox", params={"sender_id": "alpha", "status": "all"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["count"] == 1
+        assert data["messages"][0]["sender_id"] == "alpha"
+
 
 class TestInboxCount:
     def test_count(self, agent_config: AgentConfig, tmp_path: Path) -> None:
@@ -142,11 +153,14 @@ class TestInboxCount:
         assert resp.status_code == 200
         assert resp.json()["total"] == 0
 
-    def test_count_requires_swarm_id(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+    def test_count_without_swarm_id(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        """Count without swarm_id returns cross-swarm totals."""
         db_path = tmp_path / "count_no_swarm.db"
+        _seed_inbox(db_path)
         with TestClient(create_app(_cfg(agent_config, db_path))) as c:
             resp = c.get("/api/inbox/count")
-        assert resp.status_code == 422
+        assert resp.status_code == 200
+        assert resp.json()["total"] == 3
 
 
 class TestInboxGetMessage:
@@ -273,6 +287,15 @@ class TestInboxBatch:
             resp = c.post("/api/inbox/batch", json={"message_ids": [MSG_1, MSG_2, MSG_3], "action": "delete"})
         assert resp.status_code == 200
         assert resp.json()["updated"] == 3
+
+    def test_batch_read_skips_already_read(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        """Batch read with transition guard: MSG_3 is already read, should skip."""
+        db_path = tmp_path / "batch_guard.db"
+        _seed_inbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.post("/api/inbox/batch", json={"message_ids": [MSG_1, MSG_3], "action": "read"})
+        assert resp.status_code == 200
+        assert resp.json()["updated"] == 1  # only MSG_1 (unread->read)
 
     def test_batch_empty_ids_rejected(self, agent_config: AgentConfig, tmp_path: Path) -> None:
         db_path = tmp_path / "batch_empty.db"

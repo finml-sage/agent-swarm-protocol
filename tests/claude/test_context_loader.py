@@ -2,9 +2,9 @@
 import pytest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from src.state import DatabaseManager, MembershipRepository, MuteRepository
+from src.state import DatabaseManager, InboxRepository, MembershipRepository, MuteRepository
 from src.state.models import QueuedMessage, MessageStatus, SwarmMember, SwarmMembership
-from src.state.repositories import MessageRepository
+from src.state.models.inbox import InboxMessage, InboxStatus
 from src.claude.context_loader import (
     ContextLoader,
     ContextLoaderError,
@@ -171,22 +171,19 @@ class TestContextLoader:
     async def test_load_context_includes_recent_messages(
         self, db_manager: DatabaseManager, sample_message: QueuedMessage
     ) -> None:
-        """Context should include recent completed messages from the swarm."""
+        """Context should include recent messages from inbox."""
         now = datetime.now(timezone.utc)
-        # Insert and complete 3 messages in the same swarm
         async with db_manager.connection() as conn:
-            repo = MessageRepository(conn)
+            repo = InboxRepository(conn)
             for i in range(3):
-                m = QueuedMessage(
+                await repo.insert(InboxMessage(
                     message_id=f"recent-{i}",
                     swarm_id=sample_message.swarm_id,
                     sender_id="other-agent",
                     message_type="message",
                     content=f"Recent message {i}",
                     received_at=now + timedelta(seconds=i),
-                )
-                await repo.enqueue(m)
-                await repo.complete(f"recent-{i}")
+                ))
 
         loader = ContextLoader(db_manager)
         context = await loader.load_context(sample_message, recent_limit=10)
@@ -205,18 +202,16 @@ class TestContextLoader:
         """Context should respect recent_limit parameter."""
         now = datetime.now(timezone.utc)
         async with db_manager.connection() as conn:
-            repo = MessageRepository(conn)
+            repo = InboxRepository(conn)
             for i in range(5):
-                m = QueuedMessage(
+                await repo.insert(InboxMessage(
                     message_id=f"msg-{i}",
                     swarm_id=sample_message.swarm_id,
                     sender_id="other-agent",
                     message_type="message",
                     content=f"Message {i}",
                     received_at=now + timedelta(seconds=i),
-                )
-                await repo.enqueue(m)
-                await repo.complete(f"msg-{i}")
+                ))
 
         loader = ContextLoader(db_manager)
         context = await loader.load_context(sample_message, recent_limit=2)

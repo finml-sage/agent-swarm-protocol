@@ -36,12 +36,7 @@ def create_outbox_router(db: DatabaseManager) -> APIRouter:
             if swarm_id:
                 messages = await repo.list_by_swarm(swarm_id, limit=limit)
             else:
-                cursor = await conn.execute(
-                    "SELECT * FROM outbox ORDER BY sent_at DESC LIMIT ?",
-                    (min(limit, 100),),
-                )
-                rows = await cursor.fetchall()
-                messages = [repo._row_to_message(r) for r in rows]
+                messages = await repo.list_all(limit=limit)
 
         items = [
             OutboxMessageResponse(

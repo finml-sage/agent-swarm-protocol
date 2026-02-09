@@ -65,6 +65,20 @@ class OutboxRepository:
         rows = await cursor.fetchall()
         return [self._row_to_message(r) for r in rows]
 
+    async def list_all(self, limit: int = 20) -> list[OutboxMessage]:
+        """List all outgoing messages across all swarms.
+
+        Args:
+            limit: Maximum messages to return (capped at 100).
+        """
+        capped = min(limit, _MAX_LIST_LIMIT)
+        cursor = await self._conn.execute(
+            "SELECT * FROM outbox ORDER BY sent_at DESC LIMIT ?",
+            (capped,),
+        )
+        rows = await cursor.fetchall()
+        return [self._row_to_message(r) for r in rows]
+
     async def count_by_swarm(self, swarm_id: str) -> dict[str, int]:
         """Count outbox messages grouped by status for a swarm.
 

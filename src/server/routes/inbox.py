@@ -18,7 +18,7 @@ from src.server.models.inbox import (
     InboxMessageResponse,
     InboxStatusResponse,
 )
-from src.server.routes._inbox_helpers import list_inbox_messages, msg_to_response
+from src.server.routes._inbox_helpers import msg_to_response
 from src.state.database import DatabaseManager
 from src.state.models.inbox import InboxStatus
 from src.state.repositories.inbox import InboxRepository
@@ -47,15 +47,16 @@ def create_inbox_router(db: DatabaseManager) -> APIRouter:
                 content={"error": f"Invalid status '{status_filter}'. Valid: {', '.join(sorted(_VALID_STATUSES))}"},
             )
         async with db.connection() as conn:
-            messages = await list_inbox_messages(conn, status_filter, swarm_id, limit)
+            repo = InboxRepository(conn)
+            messages = await repo.list_visible(status_filter, swarm_id, sender_id, limit)
         items = [msg_to_response(m) for m in messages]
         return InboxListResponse(count=len(items), messages=items)
 
     @router.get("/api/inbox/count", response_model=InboxCountResponse, tags=["inbox"])
     async def inbox_count(
-        swarm_id: Annotated[str, Query(description="Swarm ID to query")],
+        swarm_id: Annotated[str | None, Query(description="Swarm ID filter")] = None,
     ) -> InboxCountResponse:
-        """Count inbox messages by status for a swarm."""
+        """Count inbox messages by status, optionally filtered by swarm."""
         async with db.connection() as conn:
             repo = InboxRepository(conn)
             counts = await repo.count_by_status(swarm_id)
