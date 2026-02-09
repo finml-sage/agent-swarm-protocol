@@ -135,14 +135,21 @@ def messages(
     swarm_id: str = typer.Option(None, "-s", "--swarm", help="Swarm ID"),
     limit: int = typer.Option(10, "-l", "--limit", help="Max messages to show"),
     status_filter: str = typer.Option(
-        "pending", "--status", help="Filter by status: pending|completed|failed|all",
+        "unread", "--status", help="Filter: unread|read|archived|all",
     ),
-    ack: str = typer.Option(None, "--ack", help="Mark message as completed"),
-    count: bool = typer.Option(False, "--count", help="Show pending count only"),
+    archive: str = typer.Option(None, "--archive", help="Archive a message by ID"),
+    delete: str = typer.Option(None, "--delete", help="Soft-delete a message by ID"),
+    no_mark_read: bool = typer.Option(
+        False, "--no-mark-read", help="Don't auto-mark unread messages as read",
+    ),
+    count: bool = typer.Option(False, "--count", help="Show inbox counts only"),
     json_flag: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """List and manage received messages."""
-    messages_command(swarm_id, limit, status_filter, ack, count, json_flag)
+    messages_command(
+        swarm_id, limit, status_filter, archive, delete,
+        no_mark_read, count, json_flag,
+    )
 
 
 @app.command("mute")

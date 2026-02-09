@@ -1,9 +1,8 @@
 """List and manage messages via the server inbox API.
 
-Prior to issue #151, this command read from the local client DB
-(~/.swarm/swarm.db) which has zero inbound messages.  Now it queries
-the server REST API at /api/messages, which reads from the actual
-server-side message_queue where inbound A2A messages are stored.
+Uses the /api/inbox endpoints (issue #154-#156) which provide unread/read/
+archived/deleted status lifecycle.  Auto-marks unread messages as read after
+display unless --no-mark-read is specified.
 """
 
 import asyncio
@@ -19,7 +18,7 @@ from src.cli.utils.config import ConfigError
 
 console = Console()
 
-_VALID_STATUSES = ("pending", "completed", "failed", "all")
+_VALID_STATUSES = ("unread", "read", "archived", "all")
 
 _HTTP_TIMEOUT = 15.0
 
@@ -27,10 +26,8 @@ _HTTP_TIMEOUT = 15.0
 def _server_base_url(endpoint: str) -> str:
     """Derive the server base URL from the agent's configured endpoint.
 
-    The agent endpoint looks like ``https://host.example.com/swarm``
-    (or ``https://host.example.com/swarm/``).  The inbox API lives at
-    ``/api/messages`` on the same origin, so we strip the path to get
-    the scheme+host base URL.
+    The agent endpoint looks like ``https://host.example.com/swarm``.
+    The inbox API lives at ``/api/inbox`` on the same origin.
 
     Returns:
         Base URL such as ``https://host.example.com``.
@@ -39,42 +36,57 @@ def _server_base_url(endpoint: str) -> str:
     return urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
 
 
-async def _fetch_messages(
+async def _fetch_inbox(
     base_url: str, swarm_id: str, limit: int, status_filter: str,
 ) -> dict:
-    """GET /api/messages from the server."""
+    """GET /api/inbox from the server."""
     params: dict[str, str | int] = {
         "swarm_id": swarm_id,
         "status": status_filter,
         "limit": limit,
     }
     async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
-        resp = await client.get(f"{base_url}/api/messages", params=params)
+        resp = await client.get(f"{base_url}/api/inbox", params=params)
         resp.raise_for_status()
         return resp.json()
 
 
 async def _fetch_count(base_url: str, swarm_id: str) -> dict:
-    """GET /api/messages/count from the server."""
+    """GET /api/inbox/count from the server."""
     params = {"swarm_id": swarm_id}
     async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
-        resp = await client.get(f"{base_url}/api/messages/count", params=params)
+        resp = await client.get(f"{base_url}/api/inbox/count", params=params)
         resp.raise_for_status()
         return resp.json()
 
 
-async def _ack_message_api(base_url: str, message_id: str) -> dict:
-    """POST /api/messages/{message_id}/ack on the server.
-
-    Returns the JSON body for both 200 (acked) and 404 (not_found).
-    Only raises for unexpected HTTP errors.
-    """
+async def _batch_mark_read(base_url: str, message_ids: list[str]) -> dict:
+    """POST /api/inbox/batch to mark messages as read."""
+    body = {"message_ids": message_ids, "action": "read"}
     async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
-        resp = await client.post(f"{base_url}/api/messages/{message_id}/ack")
+        resp = await client.post(f"{base_url}/api/inbox/batch", json=body)
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def _archive_message(base_url: str, message_id: str) -> dict:
+    """POST /api/inbox/{id}/archive."""
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
+        resp = await client.post(f"{base_url}/api/inbox/{message_id}/archive")
+        if resp.status_code in (200, 400, 404):
+            return resp.json()
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def _delete_message(base_url: str, message_id: str) -> dict:
+    """POST /api/inbox/{id}/delete."""
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
+        resp = await client.post(f"{base_url}/api/inbox/{message_id}/delete")
         if resp.status_code in (200, 404):
             return resp.json()
         resp.raise_for_status()
-        return resp.json()  # unreachable but keeps type checker happy
+        return resp.json()
 
 
 def _run_async(coro, error_label: str):
@@ -117,27 +129,58 @@ def _load_base_url() -> str:
     return _server_base_url(agent_config.endpoint)
 
 
+def _truncate(text: str, length: int) -> str:
+    return text[:length] + "..." if len(text) > length else text
+
+
+def _handle_archive(archive_id: str, json_flag: bool) -> None:
+    """Archive a specific message."""
+    base_url = _load_base_url()
+    data = _run_async(_archive_message(base_url, archive_id), "archive message")
+    if json_flag:
+        json_output(console, data)
+    elif "error" in data:
+        format_error(console, data["error"])
+        raise typer.Exit(code=5 if "not found" in data["error"] else 1)
+    else:
+        format_success(console, f"Message {archive_id[:12]}... archived")
+
+
+def _handle_delete(delete_id: str, json_flag: bool) -> None:
+    """Soft-delete a specific message."""
+    base_url = _load_base_url()
+    data = _run_async(_delete_message(base_url, delete_id), "delete message")
+    if json_flag:
+        json_output(console, data)
+    elif "error" in data:
+        format_error(console, data["error"])
+        raise typer.Exit(code=5)
+    else:
+        format_success(console, f"Message {delete_id[:12]}... deleted")
+
+
 def messages_command(
     swarm_id: str | None, limit: int, status_filter: str,
-    ack: str | None, count: bool, json_flag: bool,
+    archive: str | None, delete: str | None,
+    no_mark_read: bool, count: bool, json_flag: bool,
 ) -> None:
     """List and manage messages via the server inbox API."""
-    # Ack mode: no swarm_id required
-    if ack:
+    # Archive mode
+    if archive:
         try:
-            base_url = _load_base_url()
+            _handle_archive(archive, json_flag)
         except ConfigError as e:
             format_error(console, str(e), hint="Run 'swarm init' first")
             raise typer.Exit(code=1)
+        return
 
-        data = _run_async(_ack_message_api(base_url, ack), "ack message")
-        if json_flag:
-            json_output(console, data)
-        elif data["status"] == "acked":
-            format_success(console, f"Message {ack[:12]}... marked as completed")
-        else:
-            format_error(console, f"Message {ack} not found")
-            raise typer.Exit(code=5)
+    # Delete mode
+    if delete:
+        try:
+            _handle_delete(delete, json_flag)
+        except ConfigError as e:
+            format_error(console, str(e), hint="Run 'swarm init' first")
+            raise typer.Exit(code=1)
         return
 
     # Validate status filter
@@ -175,19 +218,37 @@ def messages_command(
         if json_flag:
             json_output(console, {"swarm_id": sid, **data})
         else:
-            console.print(f"[cyan]Pending messages:[/cyan] {data['pending']}")
+            console.print(f"[cyan]Unread:[/cyan] {data['unread']}  "
+                          f"[dim]Read:[/dim] {data['read']}  "
+                          f"[dim]Total:[/dim] {data['total']}")
         return
 
     # List mode
-    data = _run_async(_fetch_messages(base_url, sid, limit, status_filter), "list messages")
+    data = _run_async(_fetch_inbox(base_url, sid, limit, status_filter), "list messages")
     msgs = data.get("messages", [])
 
+    # Auto-mark-read: after listing unread messages, mark them as read
+    unread_ids = []
+    if status_filter == "unread" and not no_mark_read and msgs:
+        unread_ids = [m["message_id"] for m in msgs if m.get("status") == "unread"]
+        if unread_ids:
+            _run_async(_batch_mark_read(base_url, unread_ids), "mark messages as read")
+
     if json_flag:
-        json_output(console, {"swarm_id": sid, "count": len(msgs), "messages": msgs})
+        payload = {"swarm_id": sid, "count": len(msgs), "messages": msgs}
+        if unread_ids:
+            payload["marked_read"] = len(unread_ids)
+        json_output(console, payload)
         return
     if not msgs:
         console.print("[yellow]No messages found[/yellow]")
         return
+
+    # Build header with counts
+    header = f"Inbox ({len(msgs)} messages)"
+    if unread_ids:
+        header += f" - {len(unread_ids)} marked as read"
+
     rows = [
         (
             m["message_id"][:12] + "...",
@@ -199,12 +260,7 @@ def messages_command(
         for m in msgs
     ]
     format_table(
-        console,
-        f"Messages ({len(msgs)})",
+        console, header,
         ["ID", "Sender", "Status", "Received", "Content"],
         rows,
     )
-
-
-def _truncate(text: str, length: int) -> str:
-    return text[:length] + "..." if len(text) > length else text
