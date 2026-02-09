@@ -1,7 +1,7 @@
-"""Tests for the /api/messages inbox endpoints (issue #151).
+"""Tests for the /api/inbox and /api/outbox endpoints (issue #155).
 
-These endpoints expose the server-side message_queue to CLI clients,
-replacing the broken pattern of reading the always-empty client DB.
+Tests cover the new inbox REST API with status management (unread, read,
+archived, deleted) and the outbox listing endpoints.
 """
 
 import asyncio
@@ -12,441 +12,405 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.server.app import create_app
-from src.server.config import (
-    AgentConfig,
-    ServerConfig,
-    WakeConfig,
-    WakeEndpointConfig,
-)
+from src.server.config import AgentConfig, ServerConfig, WakeConfig, WakeEndpointConfig
 from src.state.database import DatabaseManager
-from src.state.models.message import MessageStatus, QueuedMessage
-from src.state.repositories.messages import MessageRepository
+from src.state.models.inbox import InboxMessage, InboxStatus
+from src.state.models.outbox import OutboxMessage, OutboxStatus
+from src.state.repositories.inbox import InboxRepository
+from src.state.repositories.outbox import OutboxRepository
 
 SWARM_ID = "716a4150-ab9d-4b54-a2a8-f2b7c607c21e"
-MSG_ID_1 = "aaa00000-0000-0000-0000-000000000001"
-MSG_ID_2 = "aaa00000-0000-0000-0000-000000000002"
-MSG_ID_3 = "aaa00000-0000-0000-0000-000000000003"
+MSG_1 = "aaa00000-0000-0000-0000-000000000001"
+MSG_2 = "aaa00000-0000-0000-0000-000000000002"
+MSG_3 = "aaa00000-0000-0000-0000-000000000003"
 
 _NO_WAKE = WakeConfig(enabled=False, endpoint="")
 _NO_WAKE_EP = WakeEndpointConfig(enabled=False)
 
 
-def _make_config(agent_config: AgentConfig, db_path: Path) -> ServerConfig:
-    return ServerConfig(
-        agent=agent_config,
-        db_path=db_path,
-        wake=_NO_WAKE,
-        wake_endpoint=_NO_WAKE_EP,
-    )
+def _cfg(agent_config: AgentConfig, db_path: Path) -> ServerConfig:
+    return ServerConfig(agent=agent_config, db_path=db_path, wake=_NO_WAKE, wake_endpoint=_NO_WAKE_EP)
 
 
-def _seed_messages(db_path: Path) -> None:
-    """Seed three messages into the server DB: 2 pending, 1 completed."""
-
+def _seed_inbox(db_path: Path) -> None:
+    """Seed three inbox messages: 2 unread, 1 read."""
     async def _seed() -> None:
         db = DatabaseManager(db_path)
         await db.initialize()
         async with db.connection() as conn:
-            repo = MessageRepository(conn)
-            await repo.enqueue(
-                QueuedMessage(
-                    message_id=MSG_ID_1,
-                    swarm_id=SWARM_ID,
-                    sender_id="agent-alpha",
-                    message_type="message",
-                    content='{"text": "Hello from alpha"}',
-                    received_at=datetime(2026, 2, 9, 10, 0, 0, tzinfo=timezone.utc),
-                    status=MessageStatus.PENDING,
-                )
-            )
-            await repo.enqueue(
-                QueuedMessage(
-                    message_id=MSG_ID_2,
-                    swarm_id=SWARM_ID,
-                    sender_id="agent-beta",
-                    message_type="message",
-                    content='{"text": "Hello from beta"}',
-                    received_at=datetime(2026, 2, 9, 11, 0, 0, tzinfo=timezone.utc),
-                    status=MessageStatus.PENDING,
-                )
-            )
-            await repo.enqueue(
-                QueuedMessage(
-                    message_id=MSG_ID_3,
-                    swarm_id=SWARM_ID,
-                    sender_id="agent-gamma",
-                    message_type="message",
-                    content='{"text": "Hello from gamma"}',
-                    received_at=datetime(2026, 2, 9, 12, 0, 0, tzinfo=timezone.utc),
-                    status=MessageStatus.PENDING,
-                )
-            )
-            # Mark the third message as completed
-            await repo.complete(MSG_ID_3)
+            repo = InboxRepository(conn)
+            await repo.insert(InboxMessage(
+                message_id=MSG_1, swarm_id=SWARM_ID, sender_id="alpha",
+                message_type="message", content='{"text":"hello from alpha"}',
+                received_at=datetime(2026, 2, 9, 10, 0, 0, tzinfo=timezone.utc),
+            ))
+            await repo.insert(InboxMessage(
+                message_id=MSG_2, swarm_id=SWARM_ID, sender_id="beta",
+                message_type="message", content='{"text":"hello from beta"}',
+                received_at=datetime(2026, 2, 9, 11, 0, 0, tzinfo=timezone.utc),
+            ))
+            await repo.insert(InboxMessage(
+                message_id=MSG_3, swarm_id=SWARM_ID, sender_id="gamma",
+                message_type="message", content='{"text":"hello from gamma"}',
+                received_at=datetime(2026, 2, 9, 12, 0, 0, tzinfo=timezone.utc),
+            ))
+            await repo.mark_read(MSG_3)
         await db.close()
-
     asyncio.run(_seed())
 
 
-# ---------------------------------------------------------------------------
-# GET /api/messages
-# ---------------------------------------------------------------------------
-
-
-class TestListMessages:
-    """Tests for GET /api/messages."""
-
-    def test_list_pending_messages(
-        self, agent_config: AgentConfig, tmp_path: Path,
-    ) -> None:
-        """Returns only pending messages by default."""
-        db_path = tmp_path / "inbox_list.db"
-        _seed_messages(db_path)
-        config = _make_config(agent_config, db_path)
-
-        with TestClient(create_app(config)) as c:
-            resp = c.get("/api/messages", params={"swarm_id": SWARM_ID})
-
+class TestInboxList:
+    def test_list_unread_default(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        db_path = tmp_path / "list.db"
+        _seed_inbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.get("/api/inbox", params={"swarm_id": SWARM_ID})
         assert resp.status_code == 200
         data = resp.json()
         assert data["count"] == 2
-        assert all(m["status"] == "pending" for m in data["messages"])
+        assert all(m["status"] == "unread" for m in data["messages"])
 
-    def test_list_completed_messages(
-        self, agent_config: AgentConfig, tmp_path: Path,
-    ) -> None:
-        """Filtering by completed returns only completed messages."""
-        db_path = tmp_path / "inbox_completed.db"
-        _seed_messages(db_path)
-        config = _make_config(agent_config, db_path)
-
-        with TestClient(create_app(config)) as c:
-            resp = c.get(
-                "/api/messages",
-                params={"swarm_id": SWARM_ID, "status": "completed"},
-            )
-
+    def test_list_read(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        db_path = tmp_path / "list_read.db"
+        _seed_inbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.get("/api/inbox", params={"swarm_id": SWARM_ID, "status": "read"})
         assert resp.status_code == 200
-        data = resp.json()
-        assert data["count"] == 1
-        assert data["messages"][0]["sender_id"] == "agent-gamma"
+        assert resp.json()["count"] == 1
+        assert resp.json()["messages"][0]["sender_id"] == "gamma"
 
-    def test_list_all_messages(
-        self, agent_config: AgentConfig, tmp_path: Path,
-    ) -> None:
-        """Status=all returns messages of every status."""
-        db_path = tmp_path / "inbox_all.db"
-        _seed_messages(db_path)
-        config = _make_config(agent_config, db_path)
-
-        with TestClient(create_app(config)) as c:
-            resp = c.get(
-                "/api/messages",
-                params={"swarm_id": SWARM_ID, "status": "all"},
-            )
-
+    def test_list_all(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        db_path = tmp_path / "list_all.db"
+        _seed_inbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.get("/api/inbox", params={"swarm_id": SWARM_ID, "status": "all"})
         assert resp.status_code == 200
-        data = resp.json()
-        assert data["count"] == 3
+        assert resp.json()["count"] == 3
 
-    def test_list_respects_limit(
-        self, agent_config: AgentConfig, tmp_path: Path,
-    ) -> None:
-        """Limit parameter caps the number of returned messages."""
-        db_path = tmp_path / "inbox_limit.db"
-        _seed_messages(db_path)
-        config = _make_config(agent_config, db_path)
-
-        with TestClient(create_app(config)) as c:
-            resp = c.get(
-                "/api/messages",
-                params={"swarm_id": SWARM_ID, "status": "all", "limit": 1},
-            )
-
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["count"] == 1
-
-    def test_list_empty_swarm(
-        self, agent_config: AgentConfig, tmp_path: Path,
-    ) -> None:
-        """Non-existent swarm returns empty list."""
-        db_path = tmp_path / "inbox_empty.db"
-        _seed_messages(db_path)
-        config = _make_config(agent_config, db_path)
-
-        with TestClient(create_app(config)) as c:
-            resp = c.get(
-                "/api/messages",
-                params={"swarm_id": "00000000-0000-0000-0000-000000000000"},
-            )
-
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["count"] == 0
-        assert data["messages"] == []
-
-    def test_list_invalid_status(
-        self, agent_config: AgentConfig, tmp_path: Path,
-    ) -> None:
-        """Invalid status filter returns 400."""
-        db_path = tmp_path / "inbox_badstatus.db"
-        _seed_messages(db_path)
-        config = _make_config(agent_config, db_path)
-
-        with TestClient(create_app(config)) as c:
-            resp = c.get(
-                "/api/messages",
-                params={"swarm_id": SWARM_ID, "status": "bogus"},
-            )
-
+    def test_list_invalid_status(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        db_path = tmp_path / "list_bad.db"
+        _seed_inbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.get("/api/inbox", params={"status": "bogus"})
         assert resp.status_code == 400
-        assert "Invalid status" in resp.json()["error"]
 
-    def test_list_requires_swarm_id(
-        self, agent_config: AgentConfig, tmp_path: Path,
-    ) -> None:
-        """Missing swarm_id returns 422 (FastAPI validation)."""
-        db_path = tmp_path / "inbox_noswarm.db"
-        config = _make_config(agent_config, db_path)
+    def test_list_respects_limit(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        db_path = tmp_path / "list_limit.db"
+        _seed_inbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.get("/api/inbox", params={"swarm_id": SWARM_ID, "status": "all", "limit": 1})
+        assert resp.status_code == 200
+        assert resp.json()["count"] == 1
 
-        with TestClient(create_app(config)) as c:
-            resp = c.get("/api/messages")
+    def test_list_empty_swarm(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        db_path = tmp_path / "list_empty.db"
+        _seed_inbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.get("/api/inbox", params={"swarm_id": "00000000-0000-0000-0000-000000000000"})
+        assert resp.status_code == 200
+        assert resp.json()["count"] == 0
 
-        assert resp.status_code == 422
-
-    def test_list_message_fields(
-        self, agent_config: AgentConfig, tmp_path: Path,
-    ) -> None:
-        """Each message has the expected fields."""
-        db_path = tmp_path / "inbox_fields.db"
-        _seed_messages(db_path)
-        config = _make_config(agent_config, db_path)
-
-        with TestClient(create_app(config)) as c:
-            resp = c.get(
-                "/api/messages",
-                params={"swarm_id": SWARM_ID, "status": "all", "limit": 1},
-            )
-
+    def test_list_message_fields(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        db_path = tmp_path / "list_fields.db"
+        _seed_inbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.get("/api/inbox", params={"swarm_id": SWARM_ID, "status": "all", "limit": 1})
         msg = resp.json()["messages"][0]
-        assert "message_id" in msg
-        assert "swarm_id" in msg
-        assert "sender_id" in msg
-        assert "message_type" in msg
-        assert "status" in msg
-        assert "received_at" in msg
-        assert "content_preview" in msg
+        for field in ("message_id", "swarm_id", "sender_id", "message_type", "status", "received_at", "content_preview"):
+            assert field in msg
 
-    def test_content_preview_truncated(
-        self, agent_config: AgentConfig, tmp_path: Path,
-    ) -> None:
-        """Content preview is capped at 200 characters."""
-        db_path = tmp_path / "inbox_truncate.db"
-
-        async def _seed_long():
-            db = DatabaseManager(db_path)
-            await db.initialize()
-            async with db.connection() as conn:
-                repo = MessageRepository(conn)
-                await repo.enqueue(
-                    QueuedMessage(
-                        message_id=MSG_ID_1,
-                        swarm_id=SWARM_ID,
-                        sender_id="verbose-agent",
-                        message_type="message",
-                        content="x" * 500,
-                        received_at=datetime(2026, 2, 9, 10, 0, tzinfo=timezone.utc),
-                    )
-                )
-            await db.close()
-
-        asyncio.run(_seed_long())
-        config = _make_config(agent_config, db_path)
-
-        with TestClient(create_app(config)) as c:
-            resp = c.get("/api/messages", params={"swarm_id": SWARM_ID})
-
-        msg = resp.json()["messages"][0]
-        assert len(msg["content_preview"]) == 200
-
-
-# ---------------------------------------------------------------------------
-# GET /api/messages/count
-# ---------------------------------------------------------------------------
-
-
-class TestMessageCount:
-    """Tests for GET /api/messages/count."""
-
-    def test_count_with_seeded_data(
-        self, agent_config: AgentConfig, tmp_path: Path,
-    ) -> None:
-        """Returns correct counts per status."""
-        db_path = tmp_path / "inbox_count.db"
-        _seed_messages(db_path)
-        config = _make_config(agent_config, db_path)
-
-        with TestClient(create_app(config)) as c:
-            resp = c.get(
-                "/api/messages/count", params={"swarm_id": SWARM_ID},
-            )
-
+    def test_list_by_sender(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        """sender_id filter returns only messages from that sender."""
+        db_path = tmp_path / "list_sender.db"
+        _seed_inbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.get("/api/inbox", params={"sender_id": "alpha", "status": "all"})
         assert resp.status_code == 200
         data = resp.json()
-        assert data["pending"] == 2
-        assert data["completed"] == 1
-        assert data["failed"] == 0
+        assert data["count"] == 1
+        assert data["messages"][0]["sender_id"] == "alpha"
+
+
+class TestInboxCount:
+    def test_count(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        db_path = tmp_path / "count.db"
+        _seed_inbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.get("/api/inbox/count", params={"swarm_id": SWARM_ID})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["unread"] == 2
+        assert data["read"] == 1
+        assert data["archived"] == 0
+        assert data["deleted"] == 0
         assert data["total"] == 3
 
-    def test_count_empty_swarm(
-        self, agent_config: AgentConfig, tmp_path: Path,
-    ) -> None:
-        """Empty swarm returns all-zero counts."""
-        db_path = tmp_path / "inbox_count_empty.db"
-        _seed_messages(db_path)
-        config = _make_config(agent_config, db_path)
+    def test_count_empty(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        db_path = tmp_path / "count_empty.db"
+        _seed_inbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.get("/api/inbox/count", params={"swarm_id": "00000000-0000-0000-0000-000000000000"})
+        assert resp.status_code == 200
+        assert resp.json()["total"] == 0
 
-        with TestClient(create_app(config)) as c:
-            resp = c.get(
-                "/api/messages/count",
-                params={"swarm_id": "00000000-0000-0000-0000-000000000000"},
-            )
+    def test_count_without_swarm_id(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        """Count without swarm_id returns cross-swarm totals."""
+        db_path = tmp_path / "count_no_swarm.db"
+        _seed_inbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.get("/api/inbox/count")
+        assert resp.status_code == 200
+        assert resp.json()["total"] == 3
 
+
+class TestInboxGetMessage:
+    def test_get_auto_marks_read(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        db_path = tmp_path / "get_auto.db"
+        _seed_inbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.get(f"/api/inbox/{MSG_1}")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["total"] == 0
+        assert data["message_id"] == MSG_1
+        assert data["status"] == "read"
+        assert data["read_at"] is not None
 
-    def test_count_beyond_list_limit(
-        self, agent_config: AgentConfig, tmp_path: Path,
-    ) -> None:
-        """Count endpoint reports accurate totals beyond the 100-row list cap."""
-        db_path = tmp_path / "inbox_count_150.db"
+    def test_get_already_read(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        db_path = tmp_path / "get_read.db"
+        _seed_inbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.get(f"/api/inbox/{MSG_3}")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "read"
 
-        async def _seed_many() -> None:
-            db = DatabaseManager(db_path)
-            await db.initialize()
-            async with db.connection() as conn:
-                repo = MessageRepository(conn)
-                for i in range(150):
-                    await repo.enqueue(
-                        QueuedMessage(
-                            message_id=f"bulk-{i:04d}-0000-0000-000000000000",
-                            swarm_id=SWARM_ID,
-                            sender_id="bulk-sender",
-                            message_type="message",
-                            content=f'{{"index": {i}}}',
-                            received_at=datetime(
-                                2026, 2, 9, 10, 0, i % 60, tzinfo=timezone.utc,
-                            ),
-                            status=MessageStatus.PENDING,
-                        )
-                    )
-            await db.close()
+    def test_get_not_found(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        db_path = tmp_path / "get_404.db"
+        _seed_inbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.get("/api/inbox/ffffffff-ffff-ffff-ffff-ffffffffffff")
+        assert resp.status_code == 404
 
-        asyncio.run(_seed_many())
-        config = _make_config(agent_config, db_path)
 
-        with TestClient(create_app(config)) as c:
-            resp = c.get(
-                "/api/messages/count", params={"swarm_id": SWARM_ID},
-            )
+class TestInboxMarkRead:
+    def test_mark_read(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        db_path = tmp_path / "mark_read.db"
+        _seed_inbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.post(f"/api/inbox/{MSG_1}/read")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "read"
 
+    def test_mark_read_idempotent(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        db_path = tmp_path / "mark_read_idem.db"
+        _seed_inbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            c.post(f"/api/inbox/{MSG_1}/read")
+            resp = c.post(f"/api/inbox/{MSG_1}/read")
+        assert resp.status_code == 200
+
+    def test_mark_read_not_found(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        db_path = tmp_path / "mark_read_404.db"
+        _seed_inbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.post("/api/inbox/ffffffff-ffff-ffff-ffff-ffffffffffff/read")
+        assert resp.status_code == 404
+
+
+class TestInboxArchive:
+    def test_archive(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        db_path = tmp_path / "archive.db"
+        _seed_inbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.post(f"/api/inbox/{MSG_1}/archive")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "archived"
+
+    def test_archive_not_found(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        db_path = tmp_path / "archive_404.db"
+        _seed_inbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.post("/api/inbox/ffffffff-ffff-ffff-ffff-ffffffffffff/archive")
+        assert resp.status_code == 404
+
+
+class TestInboxDelete:
+    def test_delete(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        db_path = tmp_path / "delete.db"
+        _seed_inbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.post(f"/api/inbox/{MSG_1}/delete")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "deleted"
+
+    def test_delete_not_found(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        db_path = tmp_path / "delete_404.db"
+        _seed_inbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.post("/api/inbox/ffffffff-ffff-ffff-ffff-ffffffffffff/delete")
+        assert resp.status_code == 404
+
+    def test_delete_removes_from_list(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        db_path = tmp_path / "delete_list.db"
+        _seed_inbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            c.post(f"/api/inbox/{MSG_1}/delete")
+            resp = c.get("/api/inbox", params={"swarm_id": SWARM_ID, "status": "all"})
+        assert resp.json()["count"] == 2
+        ids = [m["message_id"] for m in resp.json()["messages"]]
+        assert MSG_1 not in ids
+
+
+class TestInboxBatch:
+    def test_batch_read(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        db_path = tmp_path / "batch_read.db"
+        _seed_inbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.post("/api/inbox/batch", json={"message_ids": [MSG_1, MSG_2], "action": "read"})
         assert resp.status_code == 200
         data = resp.json()
-        assert data["pending"] == 150
-        assert data["total"] == 150
+        assert data["action"] == "read"
+        assert data["updated"] == 2
+        assert data["total"] == 2
 
-    def test_count_requires_swarm_id(
-        self, agent_config: AgentConfig, tmp_path: Path,
-    ) -> None:
-        """Missing swarm_id returns 422."""
-        db_path = tmp_path / "inbox_count_noswarm.db"
-        config = _make_config(agent_config, db_path)
+    def test_batch_archive(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        db_path = tmp_path / "batch_archive.db"
+        _seed_inbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.post("/api/inbox/batch", json={"message_ids": [MSG_1], "action": "archive"})
+        assert resp.status_code == 200
+        assert resp.json()["updated"] == 1
 
-        with TestClient(create_app(config)) as c:
-            resp = c.get("/api/messages/count")
+    def test_batch_delete(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        db_path = tmp_path / "batch_delete.db"
+        _seed_inbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.post("/api/inbox/batch", json={"message_ids": [MSG_1, MSG_2, MSG_3], "action": "delete"})
+        assert resp.status_code == 200
+        assert resp.json()["updated"] == 3
 
+    def test_batch_read_skips_already_read(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        """Batch read with transition guard: MSG_3 is already read, should skip."""
+        db_path = tmp_path / "batch_guard.db"
+        _seed_inbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.post("/api/inbox/batch", json={"message_ids": [MSG_1, MSG_3], "action": "read"})
+        assert resp.status_code == 200
+        assert resp.json()["updated"] == 1  # only MSG_1 (unread->read)
+
+    def test_batch_empty_ids_rejected(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        db_path = tmp_path / "batch_empty.db"
+        _seed_inbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.post("/api/inbox/batch", json={"message_ids": [], "action": "read"})
         assert resp.status_code == 422
 
 
-# ---------------------------------------------------------------------------
-# POST /api/messages/{message_id}/ack
-# ---------------------------------------------------------------------------
-
-
-class TestAckMessage:
-    """Tests for POST /api/messages/{message_id}/ack."""
-
-    def test_ack_pending_message(
-        self, agent_config: AgentConfig, tmp_path: Path,
-    ) -> None:
-        """Acknowledging a pending message marks it as completed."""
-        db_path = tmp_path / "inbox_ack.db"
-        _seed_messages(db_path)
-        config = _make_config(agent_config, db_path)
-
+class TestMessageReceiveInbox:
+    def test_message_goes_to_inbox(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        """POST /swarm/message inserts into inbox table, not message_queue."""
+        db_path = tmp_path / "receive.db"
+        config = _cfg(agent_config, db_path)
         with TestClient(create_app(config)) as c:
-            resp = c.post(f"/api/messages/{MSG_ID_1}/ack")
+            resp = c.post("/swarm/message", json={
+                "protocol_version": "0.1.0",
+                "message_id": "550e8400-e29b-41d4-a716-446655440000",
+                "timestamp": "2026-02-09T14:30:00.000Z",
+                "sender": {"agent_id": "sender-123", "endpoint": "https://sender.example.com"},
+                "recipient": "test-agent-001",
+                "swarm_id": "660e8400-e29b-41d4-a716-446655440001",
+                "type": "message", "content": "Hello",
+                "signature": "dGVzdC1zaWduYXR1cmUtYmFzZTY0",
+            }, headers={"Content-Type": "application/json", "X-Agent-ID": "sender-123"})
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "queued"
 
+        # Verify it is in the inbox table
+        async def _check() -> None:
+            db = DatabaseManager(db_path)
+            await db.initialize()
+            async with db.connection() as conn:
+                repo = InboxRepository(conn)
+                msg = await repo.get_by_id("550e8400-e29b-41d4-a716-446655440000")
+                assert msg is not None
+                assert msg.status == InboxStatus.UNREAD
+                assert msg.sender_id == "sender-123"
+            await db.close()
+        asyncio.run(_check())
+
+    def test_duplicate_message_idempotent(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        """Re-posting same message_id does not raise an error."""
+        db_path = tmp_path / "dup.db"
+        config = _cfg(agent_config, db_path)
+        msg = {
+            "protocol_version": "0.1.0",
+            "message_id": "550e8400-e29b-41d4-a716-446655440000",
+            "timestamp": "2026-02-09T14:30:00.000Z",
+            "sender": {"agent_id": "sender-123", "endpoint": "https://sender.example.com"},
+            "recipient": "test-agent-001",
+            "swarm_id": "660e8400-e29b-41d4-a716-446655440001",
+            "type": "message", "content": "Hello",
+            "signature": "dGVzdC1zaWduYXR1cmUtYmFzZTY0",
+        }
+        with TestClient(create_app(config)) as c:
+            r1 = c.post("/swarm/message", json=msg, headers={"Content-Type": "application/json", "X-Agent-ID": "x"})
+            r2 = c.post("/swarm/message", json=msg, headers={"Content-Type": "application/json", "X-Agent-ID": "x"})
+        assert r1.status_code == 200
+        assert r2.status_code == 200
+
+
+def _seed_outbox(db_path: Path) -> None:
+    """Seed two outbox messages."""
+    async def _seed() -> None:
+        db = DatabaseManager(db_path)
+        await db.initialize()
+        async with db.connection() as conn:
+            repo = OutboxRepository(conn)
+            await repo.insert(OutboxMessage(
+                message_id="out-001", swarm_id=SWARM_ID, recipient_id="beta",
+                message_type="message", content='{"text":"sent to beta"}',
+                sent_at=datetime(2026, 2, 9, 10, 0, 0, tzinfo=timezone.utc),
+            ))
+            await repo.insert(OutboxMessage(
+                message_id="out-002", swarm_id=SWARM_ID, recipient_id="gamma",
+                message_type="message", content='{"text":"sent to gamma"}',
+                sent_at=datetime(2026, 2, 9, 11, 0, 0, tzinfo=timezone.utc),
+            ))
+        await db.close()
+    asyncio.run(_seed())
+
+
+class TestOutboxList:
+    def test_list_sent(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        db_path = tmp_path / "outbox_list.db"
+        _seed_outbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.get("/api/outbox", params={"swarm_id": SWARM_ID})
         assert resp.status_code == 200
         data = resp.json()
-        assert data["status"] == "acked"
-        assert data["message_id"] == MSG_ID_1
+        assert data["count"] == 2
 
-    def test_ack_unknown_message(
-        self, agent_config: AgentConfig, tmp_path: Path,
-    ) -> None:
-        """Acknowledging a non-existent message returns 404."""
-        db_path = tmp_path / "inbox_ack_unknown.db"
-        _seed_messages(db_path)
-        config = _make_config(agent_config, db_path)
-        fake_id = "ffffffff-ffff-ffff-ffff-ffffffffffff"
-
-        with TestClient(create_app(config)) as c:
-            resp = c.post(f"/api/messages/{fake_id}/ack")
-
-        assert resp.status_code == 404
-        data = resp.json()
-        assert data["status"] == "not_found"
-        assert data["message_id"] == fake_id
-
-    def test_ack_changes_status_in_db(
-        self, agent_config: AgentConfig, tmp_path: Path,
-    ) -> None:
-        """After ack, message no longer appears in pending list."""
-        db_path = tmp_path / "inbox_ack_verify.db"
-        _seed_messages(db_path)
-        config = _make_config(agent_config, db_path)
-
-        with TestClient(create_app(config)) as c:
-            # Ack one of the pending messages
-            ack_resp = c.post(f"/api/messages/{MSG_ID_1}/ack")
-            assert ack_resp.json()["status"] == "acked"
-
-            # List pending -- should now have only 1
-            list_resp = c.get(
-                "/api/messages",
-                params={"swarm_id": SWARM_ID, "status": "pending"},
-            )
-
-        assert list_resp.json()["count"] == 1
-        remaining_ids = [m["message_id"] for m in list_resp.json()["messages"]]
-        assert MSG_ID_1 not in remaining_ids
-
-    def test_ack_idempotent(
-        self, agent_config: AgentConfig, tmp_path: Path,
-    ) -> None:
-        """Acknowledging an already-completed message still returns acked."""
-        db_path = tmp_path / "inbox_ack_idempotent.db"
-        _seed_messages(db_path)
-        config = _make_config(agent_config, db_path)
-
-        with TestClient(create_app(config)) as c:
-            # MSG_ID_3 is already completed from seeding
-            resp = c.post(f"/api/messages/{MSG_ID_3}/ack")
-
-        # MessageRepository.complete() updates status even if already completed
-        # (UPDATE WHERE message_id = ?), so rowcount > 0 => "acked"
+    def test_list_empty(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        db_path = tmp_path / "outbox_empty.db"
+        _seed_outbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.get("/api/outbox", params={"swarm_id": "00000000-0000-0000-0000-000000000000"})
         assert resp.status_code == 200
-        assert resp.json()["status"] == "acked"
+        assert resp.json()["count"] == 0
+
+
+class TestOutboxCount:
+    def test_count(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        db_path = tmp_path / "outbox_count.db"
+        _seed_outbox(db_path)
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.get("/api/outbox/count", params={"swarm_id": SWARM_ID})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["sent"] == 2
+        assert data["total"] == 2
+
+    def test_count_requires_swarm_id(self, agent_config: AgentConfig, tmp_path: Path) -> None:
+        db_path = tmp_path / "outbox_count_no_swarm.db"
+        with TestClient(create_app(_cfg(agent_config, db_path))) as c:
+            resp = c.get("/api/outbox/count")
+        assert resp.status_code == 422

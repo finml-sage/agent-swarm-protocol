@@ -1,15 +1,16 @@
 """Context loader for Claude subagent message processing."""
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Union
 
 from src.state import (
     DatabaseManager,
+    InboxRepository,
     MembershipRepository,
-    MessageRepository,
     MuteRepository,
     SwarmMembership,
     QueuedMessage,
+    InboxMessage,
 )
 
 
@@ -35,6 +36,27 @@ class MessageContext:
             content=msg.content,
             received_at=msg.received_at,
         )
+
+    @classmethod
+    def from_inbox(cls, msg: InboxMessage) -> "MessageContext":
+        """Create MessageContext from an InboxMessage."""
+        return cls(
+            message_id=msg.message_id,
+            swarm_id=msg.swarm_id,
+            sender_id=msg.sender_id,
+            message_type=msg.message_type,
+            content=msg.content,
+            received_at=msg.received_at,
+        )
+
+    @classmethod
+    def from_message(
+        cls, msg: Union[QueuedMessage, InboxMessage],
+    ) -> "MessageContext":
+        """Create MessageContext from either message type."""
+        if isinstance(msg, InboxMessage):
+            return cls.from_inbox(msg)
+        return cls.from_queued(msg)
 
 
 @dataclass(frozen=True)
@@ -63,37 +85,37 @@ class ContextLoader:
 
     async def load_context(
         self,
-        message: QueuedMessage,
+        message: Union[QueuedMessage, InboxMessage],
         recent_limit: int = 10,
     ) -> SwarmContext:
-        """
-        Load full context for processing a message.
+        """Load full context for processing a message.
 
         Args:
-            message: The queued message to process
-            recent_limit: Max number of recent messages to include
+            message: The queued or inbox message to process.
+            recent_limit: Max number of recent messages to include.
 
         Returns:
-            SwarmContext with message, membership, and mute state
+            SwarmContext with message, membership, and mute state.
         """
         async with self._db.connection() as conn:
             membership_repo = MembershipRepository(conn)
-            message_repo = MessageRepository(conn)
+            inbox_repo = InboxRepository(conn)
             mute_repo = MuteRepository(conn)
 
             swarm = await membership_repo.get_swarm(message.swarm_id)
             is_sender_muted = await mute_repo.is_agent_muted(message.sender_id)
             is_swarm_muted = await mute_repo.is_swarm_muted(message.swarm_id)
-            pending_count = await message_repo.get_pending_count(message.swarm_id)
+            counts = await inbox_repo.count_by_status(message.swarm_id)
+            pending_count = counts.get("unread", 0)
 
             recent = await self._get_recent_messages(
-                message_repo,
+                inbox_repo,
                 message.swarm_id,
                 recent_limit,
             )
 
         return SwarmContext(
-            message=MessageContext.from_queued(message),
+            message=MessageContext.from_message(message),
             swarm=swarm,
             recent_messages=recent,
             is_sender_muted=is_sender_muted,
@@ -103,13 +125,13 @@ class ContextLoader:
 
     async def _get_recent_messages(
         self,
-        repo: MessageRepository,
+        repo: InboxRepository,
         swarm_id: str,
         limit: int,
     ) -> tuple[MessageContext, ...]:
-        """Get recent completed messages for context."""
-        messages = await repo.get_recent(swarm_id, limit)
-        return tuple(MessageContext.from_queued(m) for m in messages)
+        """Get recent messages from inbox for context."""
+        messages = await repo.list_recent(swarm_id, limit)
+        return tuple(MessageContext.from_inbox(m) for m in messages)
 
     async def get_swarm_membership(self, swarm_id: str) -> Optional[SwarmMembership]:
         """Get membership info for a swarm."""

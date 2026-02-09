@@ -14,7 +14,7 @@ from src.server.config import (
 )
 from src.claude.wake_trigger import WakeDecision, WakeTrigger
 from src.state.database import DatabaseManager
-from src.state.repositories.messages import MessageRepository
+from src.state.repositories.inbox import InboxRepository
 
 
 def _make_config(tmp_path: Path, wake_enabled: bool = False) -> ServerConfig:
@@ -241,12 +241,12 @@ class TestWakeTriggerEnabled:
                     headers={"Content-Type": "application/json"},
                 )
 
-        # Verify message was persisted
+        # Verify message was persisted to inbox
         async def _verify() -> None:
             db = DatabaseManager(config.db_path)
             await db.initialize()
             async with db.connection() as conn:
-                repo = MessageRepository(conn)
+                repo = InboxRepository(conn)
                 stored = await repo.get_by_id(msg["message_id"])
             assert stored is not None
             assert stored.message_id == msg["message_id"]

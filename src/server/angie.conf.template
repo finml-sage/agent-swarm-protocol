@@ -123,7 +123,14 @@ http {
             include /etc/angie/conf.d/proxy_params.conf;
         }
 
-        location /api/messages {
+        location /api/inbox {
+            limit_req zone=swarm_rate burst=10 nodelay;
+            limit_req_status 429;
+            proxy_pass http://swarm_backend;
+            include /etc/angie/conf.d/proxy_params.conf;
+        }
+
+        location /api/outbox {
             limit_req zone=swarm_rate burst=10 nodelay;
             limit_req_status 429;
             proxy_pass http://swarm_backend;

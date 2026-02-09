@@ -19,6 +19,7 @@ from src.server.routes.health import create_health_router
 from src.server.routes.info import create_info_router
 from src.server.routes.wake import create_wake_router
 from src.server.routes.inbox import create_inbox_router
+from src.server.routes.outbox import create_outbox_router
 from src.state.database import DatabaseManager
 from src.claude.notification_preferences import NotificationPreferences
 from src.claude.session_manager import SessionManager
@@ -110,6 +111,7 @@ def create_app(config: Optional[ServerConfig] = None) -> FastAPI:
     app.include_router(create_health_router(config))
     app.include_router(create_info_router(config))
     app.include_router(create_inbox_router(db_manager))
+    app.include_router(create_outbox_router(db_manager))
 
     # Wire /api/wake endpoint when enabled
     if config.wake_endpoint.enabled:
