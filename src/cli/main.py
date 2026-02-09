@@ -113,11 +113,20 @@ def purge(
     timeout_minutes: int = typer.Option(
         60, "--timeout-minutes", help="Session timeout (minutes)"
     ),
+    retention_hours: int = typer.Option(
+        24, "--retention-hours", help="Only purge messages deleted more than N hours ago",
+    ),
+    force: bool = typer.Option(
+        False, "--force", help="Bypass retention window and purge all deleted messages",
+    ),
     yes: bool = typer.Option(False, "-y", "--yes", help="Skip confirmation"),
     json_flag: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Purge soft-deleted inbox messages and expired sessions."""
-    purge_command(messages, sessions, include_archived, timeout_minutes, yes, json_flag)
+    purge_command(
+        messages, sessions, include_archived, timeout_minutes,
+        retention_hours, force, yes, json_flag,
+    )
 
 
 @app.command("send")

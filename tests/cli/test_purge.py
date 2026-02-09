@@ -1,7 +1,8 @@
-"""Tests for swarm purge command (inbox schema v2.0.0).
+"""Tests for swarm purge command (inbox schema v2.1.0).
 
 Purge now operates on the inbox table: --messages purges soft-deleted
-messages, --include-archived also purges archived messages.
+messages (with a 24h retention window by default), --include-archived
+also purges archived messages.
 """
 
 import json
@@ -76,8 +77,8 @@ class TestPurgeValidation:
 class TestPurgeMessages:
     """Tests for purge --messages (inbox deleted messages)."""
 
-    def test_purge_messages(self, monkeypatch):
-        """Purge --messages --yes succeeds with zero purged."""
+    def test_purge_messages_default_retention(self, monkeypatch):
+        """Purge --messages --yes uses 24h retention by default."""
         with TemporaryDirectory() as tmpdir:
             config_dir = Path(tmpdir) / "swarm"
             _init_agent(monkeypatch, config_dir)
@@ -87,8 +88,8 @@ class TestPurgeMessages:
             assert result.exit_code == 0
             assert "Purged 0 deleted messages" in result.stdout
 
-    def test_purge_messages_json(self, monkeypatch):
-        """Purge --messages --json outputs valid JSON."""
+    def test_purge_messages_json_includes_retention(self, monkeypatch):
+        """Purge --messages --json includes retention_hours in output."""
         with TemporaryDirectory() as tmpdir:
             config_dir = Path(tmpdir) / "swarm"
             _init_agent(monkeypatch, config_dir)
@@ -101,6 +102,65 @@ class TestPurgeMessages:
             data = json.loads(result.stdout)
             assert data["status"] == "purged"
             assert data["messages_purged"] == 0
+            assert data["retention_hours"] == 24
+
+    def test_purge_messages_custom_retention(self, monkeypatch):
+        """Purge --messages --retention-hours 48 uses custom retention."""
+        with TemporaryDirectory() as tmpdir:
+            config_dir = Path(tmpdir) / "swarm"
+            _init_agent(monkeypatch, config_dir)
+
+            result = runner.invoke(
+                app,
+                ["purge", "--messages", "--yes", "--json", "--retention-hours", "48"],
+            )
+
+            assert result.exit_code == 0
+            data = json.loads(result.stdout)
+            assert data["retention_hours"] == 48
+
+    def test_purge_messages_force_bypasses_retention(self, monkeypatch):
+        """Purge --messages --force --json omits retention_hours."""
+        with TemporaryDirectory() as tmpdir:
+            config_dir = Path(tmpdir) / "swarm"
+            _init_agent(monkeypatch, config_dir)
+
+            result = runner.invoke(
+                app,
+                ["purge", "--messages", "--force", "--yes", "--json"],
+            )
+
+            assert result.exit_code == 0
+            data = json.loads(result.stdout)
+            assert data["status"] == "purged"
+            assert data["messages_purged"] == 0
+            assert "retention_hours" not in data
+
+    def test_purge_confirmation_shows_retention(self, monkeypatch):
+        """Confirmation prompt shows retention window."""
+        with TemporaryDirectory() as tmpdir:
+            config_dir = Path(tmpdir) / "swarm"
+            _init_agent(monkeypatch, config_dir)
+
+            result = runner.invoke(
+                app, ["purge", "--messages"], input="n\n"
+            )
+
+            assert result.exit_code == 0
+            assert "older than 24h" in result.stdout
+
+    def test_purge_confirmation_shows_force(self, monkeypatch):
+        """Confirmation prompt shows no retention when --force."""
+        with TemporaryDirectory() as tmpdir:
+            config_dir = Path(tmpdir) / "swarm"
+            _init_agent(monkeypatch, config_dir)
+
+            result = runner.invoke(
+                app, ["purge", "--messages", "--force"], input="n\n"
+            )
+
+            assert result.exit_code == 0
+            assert "no retention" in result.stdout.lower()
 
 
 class TestPurgeIncludeArchived:

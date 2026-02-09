@@ -178,7 +178,7 @@ def _handle_delete(delete_id: str, json_flag: bool) -> None:
         json_output(console, data)
     elif "error" in data:
         format_error(console, data["error"])
-        raise typer.Exit(code=5)
+        raise typer.Exit(code=1)
     else:
         format_success(console, f"Message {delete_id[:12]}... deleted")
 

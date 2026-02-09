@@ -13,6 +13,7 @@ from src.state import DatabaseManager, InboxRepository, SessionRepository
 console = Console()
 
 _DEFAULT_TIMEOUT_MINUTES = 60
+_DEFAULT_RETENTION_HOURS = 24
 
 
 async def _purge(
@@ -20,6 +21,7 @@ async def _purge(
     sessions: bool,
     include_archived: bool,
     timeout_minutes: int,
+    retention_hours: int | None,
 ) -> dict:
     """Purge deleted/archived inbox messages and expired sessions."""
     config = ConfigManager()
@@ -31,8 +33,12 @@ async def _purge(
     async with db.connection() as conn:
         if messages:
             repo = InboxRepository(conn)
-            deleted_count = await repo.purge_deleted()
+            deleted_count = await repo.purge_deleted(
+                older_than_hours=retention_hours,
+            )
             result["messages_purged"] = deleted_count
+            if retention_hours is not None:
+                result["retention_hours"] = retention_hours
             if include_archived:
                 archived_count = await repo.purge_archived()
                 result["archived_purged"] = archived_count
@@ -48,6 +54,8 @@ def purge_command(
     sessions: bool,
     include_archived: bool,
     timeout_minutes: int,
+    retention_hours: int,
+    force: bool,
     yes: bool,
     json_flag: bool,
 ) -> None:
@@ -60,10 +68,18 @@ def purge_command(
         )
         raise typer.Exit(code=2)
 
+    # Determine effective retention: None means purge everything
+    effective_retention: int | None = None if force else retention_hours
+
     if not yes:
         targets = []
         if messages:
-            label = "soft-deleted inbox messages"
+            if force:
+                label = "ALL soft-deleted inbox messages (no retention)"
+            else:
+                label = (
+                    f"soft-deleted inbox messages older than {retention_hours}h"
+                )
             if include_archived:
                 label += " and archived messages"
             targets.append(label)
@@ -76,7 +92,10 @@ def purge_command(
 
     try:
         result = asyncio.run(
-            _purge(messages, sessions, include_archived, timeout_minutes)
+            _purge(
+                messages, sessions, include_archived,
+                timeout_minutes, effective_retention,
+            )
         )
     except ConfigError as e:
         format_error(console, str(e), hint="Run 'swarm init' first")

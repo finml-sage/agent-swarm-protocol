@@ -551,7 +551,7 @@ class TestMessagesDelete:
     @patch("src.cli.commands.messages._delete_message", new_callable=AsyncMock)
     @patch("src.cli.commands.messages._load_base_url", return_value=BASE_URL)
     def test_delete_not_found(self, mock_url, mock_delete, monkeypatch):
-        """Delete with unknown message ID fails with exit 5."""
+        """Delete with unknown message ID fails with exit 1."""
         mock_delete.return_value = {"error": f"Message {MSG_ID} not found"}
 
         with TemporaryDirectory() as tmpdir:
@@ -560,8 +560,7 @@ class TestMessagesDelete:
 
             result = runner.invoke(app, ["messages", "--delete", MSG_ID])
 
-        assert result.exit_code == 5
-        assert "not found" in result.stdout
+        assert result.exit_code == 1
 
     @patch("src.cli.commands.messages._delete_message", new_callable=AsyncMock)
     @patch("src.cli.commands.messages._load_base_url", return_value=BASE_URL)

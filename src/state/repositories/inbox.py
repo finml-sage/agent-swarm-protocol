@@ -1,6 +1,6 @@
 """Inbox repository for incoming message storage."""
 import aiosqlite
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from src.state.models.inbox import InboxMessage, InboxStatus
@@ -19,12 +19,13 @@ class InboxRepository:
         await self._conn.execute(
             "INSERT INTO inbox (message_id, swarm_id, sender_id, "
             "recipient_id, message_type, content, received_at, "
-            "read_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "read_at, deleted_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 msg.message_id, msg.swarm_id, msg.sender_id,
                 msg.recipient_id, msg.message_type, msg.content,
                 msg.received_at.isoformat(),
                 msg.read_at.isoformat() if msg.read_at else None,
+                msg.deleted_at.isoformat() if msg.deleted_at else None,
                 msg.status.value,
             ),
         )
@@ -62,9 +63,12 @@ class InboxRepository:
 
     async def mark_deleted(self, message_id: str) -> bool:
         """Mark a message as deleted (soft delete, from any non-deleted)."""
+        now = datetime.now(timezone.utc).isoformat()
         cursor = await self._conn.execute(
-            "UPDATE inbox SET status = ? WHERE message_id = ? AND status != ?",
-            (InboxStatus.DELETED.value, message_id, InboxStatus.DELETED.value),
+            "UPDATE inbox SET status = ?, deleted_at = ? "
+            "WHERE message_id = ? AND status != ?",
+            (InboxStatus.DELETED.value, now, message_id,
+             InboxStatus.DELETED.value),
         )
         await self._conn.commit()
         return cursor.rowcount > 0
@@ -179,10 +183,11 @@ class InboxRepository:
                  InboxStatus.UNREAD.value, InboxStatus.READ.value],
             )
         elif new_status == InboxStatus.DELETED:
+            now = datetime.now(timezone.utc).isoformat()
             cursor = await self._conn.execute(
-                f"UPDATE inbox SET status = ? "
+                f"UPDATE inbox SET status = ?, deleted_at = ? "
                 f"WHERE message_id IN ({placeholders}) AND status != ?",
-                [new_status.value, *message_ids, InboxStatus.DELETED.value],
+                [new_status.value, now, *message_ids, InboxStatus.DELETED.value],
             )
         else:
             cursor = await self._conn.execute(
@@ -193,11 +198,28 @@ class InboxRepository:
         await self._conn.commit()
         return cursor.rowcount
 
-    async def purge_deleted(self) -> int:
-        """Permanently remove all messages marked as deleted."""
-        cursor = await self._conn.execute(
-            "DELETE FROM inbox WHERE status = ?", (InboxStatus.DELETED.value,),
-        )
+    async def purge_deleted(self, older_than_hours: int | None = None) -> int:
+        """Permanently remove messages marked as deleted.
+
+        Args:
+            older_than_hours: Only purge messages deleted more than this many
+                hours ago.  When ``None``, purge all deleted messages regardless
+                of when they were deleted.
+        """
+        if older_than_hours is not None:
+            cutoff = (
+                datetime.now(timezone.utc) - timedelta(hours=older_than_hours)
+            ).isoformat()
+            cursor = await self._conn.execute(
+                "DELETE FROM inbox WHERE status = ? "
+                "AND deleted_at IS NOT NULL AND deleted_at < ?",
+                (InboxStatus.DELETED.value, cutoff),
+            )
+        else:
+            cursor = await self._conn.execute(
+                "DELETE FROM inbox WHERE status = ?",
+                (InboxStatus.DELETED.value,),
+            )
         await self._conn.commit()
         return cursor.rowcount
 
@@ -220,4 +242,6 @@ class InboxRepository:
             status=InboxStatus(row["status"]),
             read_at=(datetime.fromisoformat(row["read_at"])
                      if row["read_at"] else None),
+            deleted_at=(datetime.fromisoformat(row["deleted_at"])
+                        if row["deleted_at"] else None),
         )
