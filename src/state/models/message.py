@@ -1,4 +1,10 @@
-"""Message queue models."""
+"""Message queue models.
+
+.. deprecated:: 2.0.0
+    Replaced by :mod:`src.state.models.inbox` and
+    :mod:`src.state.models.outbox`.  Kept during migration period;
+    will be removed once all consumers switch to inbox/outbox.
+"""
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
