@@ -7,57 +7,22 @@ messages -- see issue #151.
 """
 
 import logging
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Path, Query, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
 
+from src.server.models.inbox import (
+    InboxAckResponse,
+    InboxCountResponse,
+    InboxListResponse,
+    InboxMessage,
+)
 from src.state.database import DatabaseManager
 from src.state.models.message import MessageStatus
 from src.state.repositories.messages import MessageRepository
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Response models
-# ---------------------------------------------------------------------------
-
-
-class InboxMessage(BaseModel):
-    """Single message in an inbox listing."""
-
-    message_id: str
-    swarm_id: str
-    sender_id: str
-    message_type: str
-    status: str
-    received_at: str
-    content_preview: str
-
-
-class InboxListResponse(BaseModel):
-    """Response for GET /api/messages."""
-
-    count: int
-    messages: list[InboxMessage]
-
-
-class InboxCountResponse(BaseModel):
-    """Response for GET /api/messages/count."""
-
-    pending: int
-    completed: int
-    failed: int
-    total: int
-
-
-class InboxAckResponse(BaseModel):
-    """Response for POST /api/messages/{message_id}/ack."""
-
-    status: Literal["acked", "not_found"]
-    message_id: str
 
 
 # ---------------------------------------------------------------------------
@@ -144,38 +109,40 @@ def create_inbox_router(db: DatabaseManager) -> APIRouter:
         """Count messages by status for a swarm."""
         async with db.connection() as conn:
             repo = MessageRepository(conn)
-            pending = await repo.list_by_status(swarm_id, MessageStatus.PENDING, limit=100)
-            completed = await repo.list_by_status(swarm_id, MessageStatus.COMPLETED, limit=100)
-            failed = await repo.list_by_status(swarm_id, MessageStatus.FAILED, limit=100)
+            counts = await repo.count_by_status(swarm_id)
 
         return InboxCountResponse(
-            pending=len(pending),
-            completed=len(completed),
-            failed=len(failed),
-            total=len(pending) + len(completed) + len(failed),
+            pending=counts["pending"],
+            completed=counts["completed"],
+            failed=counts["failed"],
+            total=counts["total"],
         )
 
     @router.post(
         "/api/messages/{message_id}/ack",
         response_model=InboxAckResponse,
         status_code=status.HTTP_200_OK,
+        responses={404: {"model": InboxAckResponse}},
         tags=["inbox"],
     )
     async def ack_message(
         message_id: Annotated[str, Path(description="Message ID to acknowledge")],
-    ) -> InboxAckResponse:
+    ) -> InboxAckResponse | JSONResponse:
         """Mark a message as completed (acknowledged)."""
         async with db.connection() as conn:
             repo = MessageRepository(conn)
             found = await repo.complete(message_id)
 
-        result_status: Literal["acked", "not_found"] = "acked" if found else "not_found"
-
         if found:
             logger.info("Message %s acknowledged via inbox API", message_id)
-        else:
-            logger.warning("Ack request for unknown message %s", message_id)
+            return InboxAckResponse(status="acked", message_id=message_id)
 
-        return InboxAckResponse(status=result_status, message_id=message_id)
+        logger.warning("Ack request for unknown message %s", message_id)
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content=InboxAckResponse(
+                status="not_found", message_id=message_id,
+            ).model_dump(),
+        )
 
     return router

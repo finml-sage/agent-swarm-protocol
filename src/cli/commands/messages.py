@@ -64,11 +64,17 @@ async def _fetch_count(base_url: str, swarm_id: str) -> dict:
 
 
 async def _ack_message_api(base_url: str, message_id: str) -> dict:
-    """POST /api/messages/{message_id}/ack on the server."""
+    """POST /api/messages/{message_id}/ack on the server.
+
+    Returns the JSON body for both 200 (acked) and 404 (not_found).
+    Only raises for unexpected HTTP errors.
+    """
     async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
         resp = await client.post(f"{base_url}/api/messages/{message_id}/ack")
+        if resp.status_code in (200, 404):
+            return resp.json()
         resp.raise_for_status()
-        return resp.json()
+        return resp.json()  # unreachable but keeps type checker happy
 
 
 def _run_async(coro, error_label: str):
@@ -90,6 +96,13 @@ def _run_async(coro, error_label: str):
             console,
             f"Could not connect to server to {error_label}",
             hint="Is the swarm server running? Check your endpoint in ~/.swarm/config.yaml",
+        )
+        raise typer.Exit(code=3)
+    except httpx.TimeoutException:
+        format_error(
+            console,
+            f"Server request timed out while trying to {error_label}",
+            hint="The server may be overloaded. Try again or increase timeout.",
         )
         raise typer.Exit(code=3)
     except Exception as e:

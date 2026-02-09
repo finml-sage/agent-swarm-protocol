@@ -317,6 +317,46 @@ class TestMessageCount:
         data = resp.json()
         assert data["total"] == 0
 
+    def test_count_beyond_list_limit(
+        self, agent_config: AgentConfig, tmp_path: Path,
+    ) -> None:
+        """Count endpoint reports accurate totals beyond the 100-row list cap."""
+        db_path = tmp_path / "inbox_count_150.db"
+
+        async def _seed_many() -> None:
+            db = DatabaseManager(db_path)
+            await db.initialize()
+            async with db.connection() as conn:
+                repo = MessageRepository(conn)
+                for i in range(150):
+                    await repo.enqueue(
+                        QueuedMessage(
+                            message_id=f"bulk-{i:04d}-0000-0000-000000000000",
+                            swarm_id=SWARM_ID,
+                            sender_id="bulk-sender",
+                            message_type="message",
+                            content=f'{{"index": {i}}}',
+                            received_at=datetime(
+                                2026, 2, 9, 10, 0, i % 60, tzinfo=timezone.utc,
+                            ),
+                            status=MessageStatus.PENDING,
+                        )
+                    )
+            await db.close()
+
+        asyncio.run(_seed_many())
+        config = _make_config(agent_config, db_path)
+
+        with TestClient(create_app(config)) as c:
+            resp = c.get(
+                "/api/messages/count", params={"swarm_id": SWARM_ID},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["pending"] == 150
+        assert data["total"] == 150
+
     def test_count_requires_swarm_id(
         self, agent_config: AgentConfig, tmp_path: Path,
     ) -> None:
@@ -357,7 +397,7 @@ class TestAckMessage:
     def test_ack_unknown_message(
         self, agent_config: AgentConfig, tmp_path: Path,
     ) -> None:
-        """Acknowledging a non-existent message returns not_found."""
+        """Acknowledging a non-existent message returns 404."""
         db_path = tmp_path / "inbox_ack_unknown.db"
         _seed_messages(db_path)
         config = _make_config(agent_config, db_path)
@@ -366,7 +406,7 @@ class TestAckMessage:
         with TestClient(create_app(config)) as c:
             resp = c.post(f"/api/messages/{fake_id}/ack")
 
-        assert resp.status_code == 200
+        assert resp.status_code == 404
         data = resp.json()
         assert data["status"] == "not_found"
         assert data["message_id"] == fake_id

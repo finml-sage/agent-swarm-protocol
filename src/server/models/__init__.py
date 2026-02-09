@@ -10,6 +10,12 @@ from src.server.models.responses import (
     ErrorDetail,
     ErrorResponse,
 )
+from src.server.models.inbox import (
+    InboxMessage,
+    InboxListResponse,
+    InboxCountResponse,
+    InboxAckResponse,
+)
 
 __all__ = [
     "Sender",
@@ -24,4 +30,8 @@ __all__ = [
     "AgentInfoResponse",
     "ErrorDetail",
     "ErrorResponse",
+    "InboxMessage",
+    "InboxListResponse",
+    "InboxCountResponse",
+    "InboxAckResponse",
 ]

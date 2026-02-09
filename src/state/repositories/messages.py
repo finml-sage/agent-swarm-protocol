@@ -34,6 +34,26 @@ class MessageRepository:
     async def get_pending_count(self, swarm_id: str) -> int:
         c = await self._conn.execute("SELECT COUNT(*) FROM message_queue WHERE swarm_id = ? AND status = ?", (swarm_id, MessageStatus.PENDING.value))
         return (await c.fetchone())[0]
+    async def count_by_status(self, swarm_id: str) -> dict[str, int]:
+        """Count messages grouped by status for a swarm.
+
+        Returns a dict with keys 'pending', 'completed', 'failed', and
+        'total'.  Uses SQL COUNT(*) so the result is never capped by
+        _MAX_RECENT_LIMIT.
+        """
+        c = await self._conn.execute(
+            "SELECT status, COUNT(*) FROM message_queue WHERE swarm_id = ? GROUP BY status",
+            (swarm_id,),
+        )
+        rows = await c.fetchall()
+        counts: dict[str, int] = {"pending": 0, "completed": 0, "failed": 0}
+        for row in rows:
+            status_val = row[0]
+            count_val = row[1]
+            if status_val in counts:
+                counts[status_val] = count_val
+        counts["total"] = sum(counts.values())
+        return counts
     async def list_by_status(self, swarm_id: str, status: MessageStatus | None = None, limit: int = 10) -> list[QueuedMessage]:
         """List messages for a swarm, optionally filtered by status.
 
