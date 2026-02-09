@@ -405,11 +405,11 @@ Muted agents/swarms have their messages silently discarded (accepted with HTTP 2
 
 Agent state (memberships, mutes, public key cache) is stored in `~/.swarm/swarm.db` (SQLite). State files support export/import for migration between hosts.
 
-The server also persists incoming messages to SQLite via `MessageRepository`.
-Messages are stored before entering the in-memory queue, with idempotent
-duplicate handling (same `message_id` is silently ignored). The
-`get_recent()` method retrieves conversation history (capped at 100) for
-context loading.
+The server persists incoming messages to the `inbox` table via `InboxRepository`.
+Messages are stored with idempotent duplicate handling (same `message_id` is
+silently ignored). The `list_recent()` method retrieves conversation history
+(capped at 100) for context loading. Outbound messages are tracked in the
+`outbox` table via `OutboxRepository`.
 
 ### Best Practices
 

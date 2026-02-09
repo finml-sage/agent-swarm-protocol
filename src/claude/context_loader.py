@@ -1,7 +1,7 @@
 """Context loader for Claude subagent message processing."""
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, Union
+from typing import Optional
 
 from src.state import (
     DatabaseManager,
@@ -9,7 +9,6 @@ from src.state import (
     MembershipRepository,
     MuteRepository,
     SwarmMembership,
-    QueuedMessage,
     InboxMessage,
 )
 
@@ -26,18 +25,6 @@ class MessageContext:
     received_at: datetime
 
     @classmethod
-    def from_queued(cls, msg: QueuedMessage) -> "MessageContext":
-        """Create MessageContext from a QueuedMessage."""
-        return cls(
-            message_id=msg.message_id,
-            swarm_id=msg.swarm_id,
-            sender_id=msg.sender_id,
-            message_type=msg.message_type,
-            content=msg.content,
-            received_at=msg.received_at,
-        )
-
-    @classmethod
     def from_inbox(cls, msg: InboxMessage) -> "MessageContext":
         """Create MessageContext from an InboxMessage."""
         return cls(
@@ -49,15 +36,6 @@ class MessageContext:
             received_at=msg.received_at,
         )
 
-    @classmethod
-    def from_message(
-        cls, msg: Union[QueuedMessage, InboxMessage],
-    ) -> "MessageContext":
-        """Create MessageContext from either message type."""
-        if isinstance(msg, InboxMessage):
-            return cls.from_inbox(msg)
-        return cls.from_queued(msg)
-
 
 @dataclass(frozen=True)
 class SwarmContext:
@@ -68,7 +46,7 @@ class SwarmContext:
     recent_messages: tuple[MessageContext, ...]
     is_sender_muted: bool
     is_swarm_muted: bool
-    pending_count: int
+    unread_count: int
 
 
 class ContextLoaderError(Exception):
@@ -85,13 +63,13 @@ class ContextLoader:
 
     async def load_context(
         self,
-        message: Union[QueuedMessage, InboxMessage],
+        message: InboxMessage,
         recent_limit: int = 10,
     ) -> SwarmContext:
         """Load full context for processing a message.
 
         Args:
-            message: The queued or inbox message to process.
+            message: The inbox message to process.
             recent_limit: Max number of recent messages to include.
 
         Returns:
@@ -106,7 +84,7 @@ class ContextLoader:
             is_sender_muted = await mute_repo.is_agent_muted(message.sender_id)
             is_swarm_muted = await mute_repo.is_swarm_muted(message.swarm_id)
             counts = await inbox_repo.count_by_status(message.swarm_id)
-            pending_count = counts.get("unread", 0)
+            unread_count = counts.get("unread", 0)
 
             recent = await self._get_recent_messages(
                 inbox_repo,
@@ -115,12 +93,12 @@ class ContextLoader:
             )
 
         return SwarmContext(
-            message=MessageContext.from_message(message),
+            message=MessageContext.from_inbox(message),
             swarm=swarm,
             recent_messages=recent,
             is_sender_muted=is_sender_muted,
             is_swarm_muted=is_swarm_muted,
-            pending_count=pending_count,
+            unread_count=unread_count,
         )
 
     async def _get_recent_messages(

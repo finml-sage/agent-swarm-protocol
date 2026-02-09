@@ -10,17 +10,16 @@ from src.state import (
     SwarmMember,
     SwarmSettings,
     SwarmMembership,
-    QueuedMessage,
-    MessageStatus,
     PublicKeyEntry,
     export_state,
 )
+from src.state.models.message import QueuedMessage, MessageStatus
 from src.state.repositories import (
     MembershipRepository,
-    MessageRepository,
     MuteRepository,
     PublicKeyRepository,
 )
+from src.state.repositories.messages import MessageRepository
 
 
 @pytest_asyncio.fixture
@@ -351,7 +350,7 @@ class TestExportImport:
         async with db.connection() as conn:
             await MembershipRepository(conn).create_swarm(sample_membership)
         state = await export_state(db, "my-agent")
-        assert state["schema_version"] == "1.0.0"
+        assert state["schema_version"] == "2.0.0"
         assert sample_membership.swarm_id in state["swarms"]
 
 

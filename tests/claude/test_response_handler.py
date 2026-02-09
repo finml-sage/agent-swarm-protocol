@@ -4,8 +4,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4, UUID
 from unittest.mock import AsyncMock, MagicMock, patch
-from src.state import DatabaseManager, MessageRepository
-from src.state.models import QueuedMessage, MessageStatus
+from src.state import DatabaseManager, InboxRepository
+from src.state.models.inbox import InboxMessage, InboxStatus
 from src.client import SwarmClient
 from src.client.types import MessageType, Priority
 from src.claude.response_handler import (
@@ -38,20 +38,20 @@ class TestResponseHandler:
         return client
 
     @pytest.fixture
-    async def sample_message(self, db_manager: DatabaseManager) -> QueuedMessage:
-        """Create sample queued message in database."""
-        msg = QueuedMessage(
+    async def sample_message(self, db_manager: DatabaseManager) -> InboxMessage:
+        """Create sample inbox message in database."""
+        msg = InboxMessage(
             message_id=str(uuid4()),
             swarm_id=str(uuid4()),
             sender_id="agent-sender",
             message_type="message",
             content="Hello swarm!",
             received_at=datetime.now(timezone.utc),
-            status=MessageStatus.PENDING,
+            status=InboxStatus.UNREAD,
         )
         async with db_manager.connection() as conn:
-            repo = MessageRepository(conn)
-            await repo.enqueue(msg)
+            repo = InboxRepository(conn)
+            await repo.insert(msg)
         return msg
 
     def test_uninitialized_db_raises(
@@ -67,7 +67,7 @@ class TestResponseHandler:
         self,
         db_manager: DatabaseManager,
         mock_client: AsyncMock,
-        sample_message: QueuedMessage,
+        sample_message: InboxMessage,
     ) -> None:
         """Broadcast reply should use SwarmClient."""
         handler = ResponseHandler(db_manager, mock_client)
@@ -91,7 +91,7 @@ class TestResponseHandler:
         self,
         db_manager: DatabaseManager,
         mock_client: AsyncMock,
-        sample_message: QueuedMessage,
+        sample_message: InboxMessage,
     ) -> None:
         """Direct reply should set specific recipient."""
         handler = ResponseHandler(db_manager, mock_client)
@@ -109,13 +109,13 @@ class TestResponseHandler:
         assert call_kwargs["recipient"] == "specific-agent"
 
     @pytest.mark.asyncio
-    async def test_send_reply_marks_completed(
+    async def test_send_reply_marks_read(
         self,
         db_manager: DatabaseManager,
         mock_client: AsyncMock,
-        sample_message: QueuedMessage,
+        sample_message: InboxMessage,
     ) -> None:
-        """Successful reply should mark message as completed."""
+        """Successful reply should mark message as read."""
         handler = ResponseHandler(db_manager, mock_client)
         await handler.send_reply(
             original_message_id=sample_message.message_id,
@@ -124,19 +124,19 @@ class TestResponseHandler:
         )
 
         async with db_manager.connection() as conn:
-            repo = MessageRepository(conn)
+            repo = InboxRepository(conn)
             msg = await repo.get_by_id(sample_message.message_id)
             assert msg is not None
-            assert msg.status == MessageStatus.COMPLETED
+            assert msg.status == InboxStatus.READ
 
     @pytest.mark.asyncio
-    async def test_send_reply_failure_marks_failed(
+    async def test_send_reply_failure_marks_read(
         self,
         db_manager: DatabaseManager,
         mock_client: AsyncMock,
-        sample_message: QueuedMessage,
+        sample_message: InboxMessage,
     ) -> None:
-        """Failed reply should mark message as failed."""
+        """Failed reply should still mark message as read (it was processed)."""
         mock_client.send_message.side_effect = Exception("Network error")
 
         handler = ResponseHandler(db_manager, mock_client)
@@ -150,19 +150,19 @@ class TestResponseHandler:
         assert result.error == "Network error"
 
         async with db_manager.connection() as conn:
-            repo = MessageRepository(conn)
+            repo = InboxRepository(conn)
             msg = await repo.get_by_id(sample_message.message_id)
             assert msg is not None
-            assert msg.status == MessageStatus.FAILED
+            assert msg.status == InboxStatus.READ
 
     @pytest.mark.asyncio
     async def test_acknowledge(
         self,
         db_manager: DatabaseManager,
         mock_client: AsyncMock,
-        sample_message: QueuedMessage,
+        sample_message: InboxMessage,
     ) -> None:
-        """Acknowledge should mark completed without sending."""
+        """Acknowledge should mark read without sending."""
         handler = ResponseHandler(db_manager, mock_client)
         result = await handler.acknowledge(sample_message.message_id)
 
@@ -171,17 +171,17 @@ class TestResponseHandler:
         mock_client.send_message.assert_not_called()
 
         async with db_manager.connection() as conn:
-            repo = MessageRepository(conn)
+            repo = InboxRepository(conn)
             msg = await repo.get_by_id(sample_message.message_id)
             assert msg is not None
-            assert msg.status == MessageStatus.COMPLETED
+            assert msg.status == InboxStatus.READ
 
     @pytest.mark.asyncio
     async def test_leave_swarm(
         self,
         db_manager: DatabaseManager,
         mock_client: AsyncMock,
-        sample_message: QueuedMessage,
+        sample_message: InboxMessage,
     ) -> None:
         """Leave swarm should call client leave."""
         handler = ResponseHandler(db_manager, mock_client)
@@ -199,7 +199,7 @@ class TestResponseHandler:
         self,
         db_manager: DatabaseManager,
         mock_client: AsyncMock,
-        sample_message: QueuedMessage,
+        sample_message: InboxMessage,
     ) -> None:
         """Failed leave should return error result."""
         mock_client.leave_swarm.side_effect = Exception("Not a member")
@@ -218,7 +218,7 @@ class TestResponseHandler:
         self,
         db_manager: DatabaseManager,
         mock_client: AsyncMock,
-        sample_message: QueuedMessage,
+        sample_message: InboxMessage,
     ) -> None:
         """Reply should pass priority to client."""
         handler = ResponseHandler(db_manager, mock_client)
@@ -237,7 +237,7 @@ class TestResponseHandler:
         self,
         db_manager: DatabaseManager,
         mock_client: AsyncMock,
-        sample_message: QueuedMessage,
+        sample_message: InboxMessage,
     ) -> None:
         """Reply should pass thread_id to client."""
         thread_id = uuid4()

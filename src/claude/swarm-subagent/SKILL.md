@@ -30,7 +30,7 @@ When woken, you receive a `SwarmContext` containing:
 - **recent_messages**: Recent conversation history
 - **is_sender_muted**: Whether sender is muted
 - **is_swarm_muted**: Whether swarm is muted
-- **pending_count**: Messages waiting to be processed
+- **unread_count**: Unread messages in the inbox
 
 ## Available Actions
 

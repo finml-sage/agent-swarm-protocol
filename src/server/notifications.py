@@ -12,8 +12,8 @@ from enum import Enum
 from typing import Optional
 
 from src.state.database import DatabaseManager
-from src.state.models.message import QueuedMessage
-from src.state.repositories.messages import MessageRepository
+from src.state.models.inbox import InboxMessage, InboxStatus
+from src.state.repositories.inbox import InboxRepository
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +39,8 @@ class LifecycleEvent:
     reason: Optional[str] = None
 
 
-def build_notification_message(event: LifecycleEvent) -> QueuedMessage:
-    """Build a QueuedMessage from a lifecycle event.
+def build_notification_message(event: LifecycleEvent) -> InboxMessage:
+    """Build an InboxMessage from a lifecycle event.
 
     The message content is a JSON-serialisable string matching the
     protocol's system message format (type=system, action=<lifecycle>).
@@ -55,36 +55,37 @@ def build_notification_message(event: LifecycleEvent) -> QueuedMessage:
         "initiated_by": event.initiated_by,
         "reason": event.reason,
     })
-    return QueuedMessage(
+    return InboxMessage(
         message_id=str(uuid.uuid4()),
         swarm_id=event.swarm_id,
         sender_id=event.initiated_by or event.agent_id,
         message_type="system",
         content=content,
         received_at=datetime.now(timezone.utc),
+        status=InboxStatus.UNREAD,
     )
 
 
 async def persist_notification(
     db: DatabaseManager,
     event: LifecycleEvent,
-) -> QueuedMessage:
-    """Persist a lifecycle notification to the message queue.
+) -> InboxMessage:
+    """Persist a lifecycle notification to the inbox.
 
     Args:
         db: Active DatabaseManager instance.
         event: The lifecycle event to record.
 
     Returns:
-        The persisted QueuedMessage.
+        The persisted InboxMessage.
 
     Raises:
         ValueError: If the event has invalid fields.
     """
     message = build_notification_message(event)
     async with db.connection() as conn:
-        repo = MessageRepository(conn)
-        await repo.enqueue(message)
+        repo = InboxRepository(conn)
+        await repo.insert(message)
     logger.info(
         "Persisted %s notification: agent=%s swarm=%s",
         event.action.value,
@@ -98,7 +99,7 @@ async def notify_member_joined(
     db: DatabaseManager,
     swarm_id: str,
     agent_id: str,
-) -> QueuedMessage:
+) -> InboxMessage:
     """Record a member_joined notification.
 
     Called after a successful join to broadcast awareness to existing
@@ -117,7 +118,7 @@ async def notify_member_left(
     db: DatabaseManager,
     swarm_id: str,
     agent_id: str,
-) -> QueuedMessage:
+) -> InboxMessage:
     """Record a member_left notification."""
     event = LifecycleEvent(
         action=LifecycleAction.MEMBER_LEFT,
@@ -133,7 +134,7 @@ async def notify_member_kicked(
     agent_id: str,
     initiated_by: str,
     reason: Optional[str] = None,
-) -> QueuedMessage:
+) -> InboxMessage:
     """Record a member_kicked notification."""
     event = LifecycleEvent(
         action=LifecycleAction.MEMBER_KICKED,
@@ -151,7 +152,7 @@ async def notify_member_muted(
     agent_id: str,
     initiated_by: str,
     reason: Optional[str] = None,
-) -> QueuedMessage:
+) -> InboxMessage:
     """Record a member_muted notification."""
     event = LifecycleEvent(
         action=LifecycleAction.MEMBER_MUTED,
@@ -168,7 +169,7 @@ async def notify_member_unmuted(
     swarm_id: str,
     agent_id: str,
     initiated_by: str,
-) -> QueuedMessage:
+) -> InboxMessage:
     """Record a member_unmuted notification."""
     event = LifecycleEvent(
         action=LifecycleAction.MEMBER_UNMUTED,

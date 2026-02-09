@@ -6,7 +6,7 @@ from uuid import UUID
 
 from src.client import SwarmClient
 from src.client.types import MessageType, Priority
-from src.state import DatabaseManager, MessageRepository
+from src.state import DatabaseManager, InboxRepository
 
 
 class ResponseAction(Enum):
@@ -87,13 +87,13 @@ class ResponseHandler:
             return ResponseResult(action=ResponseAction.LEAVE_SWARM, success=False, error=str(e))
 
     async def _mark_processed(self, message_id: str) -> None:
-        """Mark message as completed in queue."""
+        """Mark message as read in inbox."""
         async with self._db.connection() as conn:
-            repo = MessageRepository(conn)
-            await repo.complete(message_id)
+            repo = InboxRepository(conn)
+            await repo.mark_read(message_id)
 
     async def _mark_failed(self, message_id: str, error: str) -> None:
-        """Mark message as failed in queue."""
+        """Mark message as read in inbox (even on failure, it was processed)."""
         async with self._db.connection() as conn:
-            repo = MessageRepository(conn)
-            await repo.fail(message_id, error)
+            repo = InboxRepository(conn)
+            await repo.mark_read(message_id)

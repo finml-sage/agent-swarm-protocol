@@ -3,7 +3,7 @@ import pytest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from src.state import DatabaseManager, InboxRepository, MembershipRepository, MuteRepository
-from src.state.models import QueuedMessage, MessageStatus, SwarmMember, SwarmMembership
+from src.state.models import SwarmMember, SwarmMembership
 from src.state.models.inbox import InboxMessage, InboxStatus
 from src.claude.context_loader import (
     ContextLoader,
@@ -25,16 +25,16 @@ class TestContextLoader:
         return manager
 
     @pytest.fixture
-    def sample_message(self) -> QueuedMessage:
-        """Create sample queued message."""
-        return QueuedMessage(
+    def sample_message(self) -> InboxMessage:
+        """Create sample inbox message."""
+        return InboxMessage(
             message_id="msg-123",
             swarm_id="swarm-456",
             sender_id="agent-sender",
             message_type="message",
             content="Hello swarm!",
             received_at=datetime.now(timezone.utc),
-            status=MessageStatus.PENDING,
+            status=InboxStatus.UNREAD,
         )
 
     @pytest.fixture
@@ -67,11 +67,11 @@ class TestContextLoader:
             ContextLoader(db)
 
     @pytest.mark.asyncio
-    async def test_message_context_from_queued(
-        self, sample_message: QueuedMessage
+    async def test_message_context_from_inbox(
+        self, sample_message: InboxMessage
     ) -> None:
-        """MessageContext should convert from QueuedMessage."""
-        ctx = MessageContext.from_queued(sample_message)
+        """MessageContext should convert from InboxMessage."""
+        ctx = MessageContext.from_inbox(sample_message)
         assert ctx.message_id == sample_message.message_id
         assert ctx.swarm_id == sample_message.swarm_id
         assert ctx.sender_id == sample_message.sender_id
@@ -79,7 +79,7 @@ class TestContextLoader:
 
     @pytest.mark.asyncio
     async def test_load_context_basic(
-        self, db_manager: DatabaseManager, sample_message: QueuedMessage
+        self, db_manager: DatabaseManager, sample_message: InboxMessage
     ) -> None:
         """Basic context loading should work."""
         loader = ContextLoader(db_manager)
@@ -94,7 +94,7 @@ class TestContextLoader:
     async def test_load_context_with_swarm(
         self,
         db_manager: DatabaseManager,
-        sample_message: QueuedMessage,
+        sample_message: InboxMessage,
         sample_swarm: SwarmMembership,
     ) -> None:
         """Context should include swarm membership when exists."""
@@ -107,7 +107,7 @@ class TestContextLoader:
 
     @pytest.mark.asyncio
     async def test_load_context_muted_sender(
-        self, db_manager: DatabaseManager, sample_message: QueuedMessage
+        self, db_manager: DatabaseManager, sample_message: InboxMessage
     ) -> None:
         """Context should reflect muted sender."""
         async with db_manager.connection() as conn:
@@ -120,7 +120,7 @@ class TestContextLoader:
 
     @pytest.mark.asyncio
     async def test_load_context_muted_swarm(
-        self, db_manager: DatabaseManager, sample_message: QueuedMessage
+        self, db_manager: DatabaseManager, sample_message: InboxMessage
     ) -> None:
         """Context should reflect muted swarm."""
         async with db_manager.connection() as conn:
@@ -169,7 +169,7 @@ class TestContextLoader:
 
     @pytest.mark.asyncio
     async def test_load_context_includes_recent_messages(
-        self, db_manager: DatabaseManager, sample_message: QueuedMessage
+        self, db_manager: DatabaseManager, sample_message: InboxMessage
     ) -> None:
         """Context should include recent messages from inbox."""
         now = datetime.now(timezone.utc)
@@ -197,7 +197,7 @@ class TestContextLoader:
 
     @pytest.mark.asyncio
     async def test_load_context_recent_messages_respects_limit(
-        self, db_manager: DatabaseManager, sample_message: QueuedMessage
+        self, db_manager: DatabaseManager, sample_message: InboxMessage
     ) -> None:
         """Context should respect recent_limit parameter."""
         now = datetime.now(timezone.utc)
@@ -222,7 +222,7 @@ class TestContextLoader:
 
     @pytest.mark.asyncio
     async def test_load_context_no_recent_messages(
-        self, db_manager: DatabaseManager, sample_message: QueuedMessage
+        self, db_manager: DatabaseManager, sample_message: InboxMessage
     ) -> None:
         """Context should have empty recent_messages when none exist."""
         loader = ContextLoader(db_manager)

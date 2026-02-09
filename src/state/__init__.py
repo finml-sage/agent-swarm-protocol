@@ -5,14 +5,13 @@ from src.state.join import JoinError, SwarmNotFoundError, AlreadyMemberError, Ap
 from src.state.models import (
     InboxMessage, InboxStatus,
     SwarmMember, SwarmSettings, SwarmMembership,
-    QueuedMessage, MessageStatus,
     MutedAgent, MutedSwarm,
     OutboxMessage, OutboxStatus,
     PublicKeyEntry, SdkSession,
 )
 from src.state.repositories import (
     InboxRepository,
-    MembershipRepository, MessageRepository, MuteRepository,
+    MembershipRepository, MuteRepository,
     PublicKeyRepository, OutboxRepository, SessionRepository,
 )
 from src.state.session_service import lookup_sdk_session, persist_sdk_session
@@ -24,12 +23,11 @@ __all__ = [
     "JoinResult", "validate_and_join", "lookup_swarm", "member_exists",
     "InboxMessage", "InboxStatus",
     "SwarmMember", "SwarmSettings", "SwarmMembership",
-    "QueuedMessage", "MessageStatus",
     "MutedAgent", "MutedSwarm",
     "OutboxMessage", "OutboxStatus",
     "PublicKeyEntry", "SdkSession",
     "InboxRepository",
-    "MembershipRepository", "MessageRepository", "MuteRepository",
+    "MembershipRepository", "MuteRepository",
     "PublicKeyRepository", "OutboxRepository", "SessionRepository",
     "lookup_sdk_session", "persist_sdk_session",
     "TokenError", "TokenSignatureError", "TokenExpiredError", "TokenPayloadError",

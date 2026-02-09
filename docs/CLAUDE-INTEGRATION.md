@@ -12,7 +12,7 @@ This document describes how Claude Code integrates with the Agent Swarm Protocol
     |       |                                          |
     |       v                                          |
     |  +----------------+    +----------------------+  |
-    |  | MessageRepo    |    | WakeTrigger          |  |
+    |  | InboxRepo      |    | WakeTrigger          |  |
     |  | (SQLite)       |--->| (evaluates prefs)    |  |
     |  +----------------+    +-----------+----------+  |
     |                                    |             |
@@ -43,9 +43,8 @@ This document describes how Claude Code integrates with the Agent Swarm Protocol
 The wake trigger runs **inside the FastAPI server**, not as an external daemon.
 When a message arrives at `POST /swarm/message`, the server:
 
-1. Persists the message to SQLite via `MessageRepository`
-2. Adds the message to the in-memory queue
-3. Evaluates the message via `WakeTrigger` (if `WAKE_ENABLED=true`)
+1. Persists the message to the inbox table via `InboxRepository`
+2. Evaluates the message via `WakeTrigger` (if `WAKE_ENABLED=true`)
 4. If the decision is WAKE, POSTs to `/api/wake` (which may be on the same server)
 5. The wake endpoint invokes the agent via the configured `AgentInvoker`
 
@@ -91,7 +90,7 @@ trigger = WakeTrigger(
 )
 
 # Process incoming message
-event = await trigger.process_message(queued_message)
+event = await trigger.process_message(inbox_message)
 if event.decision == WakeDecision.WAKE:
     print(f"Woke Claude for message {event.message.message_id}")
 ```
@@ -165,20 +164,20 @@ Loads full context from state for Claude to make informed decisions.
 
 **Responsibilities:**
 - Load swarm membership information
-- Fetch recent message history (via `MessageRepository.get_recent()`, capped at 100)
+- Fetch recent message history (via `InboxRepository.list_recent()`, capped at 100)
 - Check mute status for sender and swarm
-- Count pending messages
+- Count unread messages
 
 **Usage:**
 ```python
 from src.claude import ContextLoader
 
 loader = ContextLoader(db_manager)
-context = await loader.load_context(queued_message, recent_limit=10)
+context = await loader.load_context(inbox_message, recent_limit=10)
 
 print(f"Swarm: {context.swarm.name if context.swarm else 'Unknown'}")
 print(f"Sender muted: {context.is_sender_muted}")
-print(f"Pending messages: {context.pending_count}")
+print(f"Unread messages: {context.unread_count}")
 ```
 
 ### Response Handler (`src/claude/response_handler.py`)
@@ -189,7 +188,7 @@ Executes Claude's decisions by sending messages via the SwarmClient.
 - Send replies (broadcast or direct)
 - Acknowledge messages without response
 - Execute leave swarm requests
-- Mark messages as completed/failed in queue
+- Mark messages as read in inbox
 
 **Usage:**
 ```python
@@ -289,13 +288,10 @@ session.suspend_session(
 
 Server receives message at `POST /swarm/message`:
 ```python
-# Message is persisted to SQLite (idempotent on message_id)
+# Message is persisted to inbox table (idempotent on message_id)
 async with db.connection() as conn:
-    repo = MessageRepository(conn)
-    await repo.enqueue(message)
-
-# Added to in-memory queue
-await queue.put(body)
+    repo = InboxRepository(conn)
+    await repo.insert(inbox_msg)
 ```
 
 ### 2. Wake Trigger Evaluates
@@ -319,8 +315,8 @@ session and invokes the agent if none is running.
 The `AgentInvoker` starts the Claude subagent using the configured method.
 The subagent receives the wake payload and loads context:
 ```python
-context = await loader.load_context(queued_message, recent_limit=10)
-# context.message, context.swarm, context.is_sender_muted, context.pending_count
+context = await loader.load_context(inbox_message, recent_limit=10)
+# context.message, context.swarm, context.is_sender_muted, context.unread_count
 ```
 
 ### 5. Claude Responds

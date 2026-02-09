@@ -23,10 +23,10 @@ from src.server.notifications import (
     persist_notification,
 )
 from src.state.database import DatabaseManager
+from src.state.models.inbox import InboxMessage, InboxStatus
 from src.state.models.member import SwarmMember, SwarmMembership, SwarmSettings
-from src.state.models.message import MessageStatus
+from src.state.repositories.inbox import InboxRepository
 from src.state.repositories.membership import MembershipRepository
-from src.state.repositories.messages import MessageRepository
 from tests.conftest import _make_jwt
 
 SWARM_ID = "550e8400-e29b-41d4-a716-446655440000"
@@ -156,14 +156,14 @@ class TestBuildNotificationMessage:
         after = datetime.now(timezone.utc)
         assert before <= msg.received_at <= after
 
-    def test_message_status_is_pending(self) -> None:
+    def test_message_status_is_unread(self) -> None:
         event = LifecycleEvent(
             action=LifecycleAction.MEMBER_JOINED,
             swarm_id=SWARM_ID,
             agent_id="agent",
         )
         msg = build_notification_message(event)
-        assert msg.status == MessageStatus.PENDING
+        assert msg.status == InboxStatus.UNREAD
 
 
 class TestPersistNotification:
@@ -180,11 +180,12 @@ class TestPersistNotification:
         )
         msg = await persist_notification(db, event)
         async with db.connection() as conn:
-            repo = MessageRepository(conn)
+            repo = InboxRepository(conn)
             stored = await repo.get_by_id(msg.message_id)
         assert stored is not None
         assert stored.message_type == "system"
         assert stored.swarm_id == SWARM_ID
+        assert stored.status == InboxStatus.UNREAD
         content = json.loads(stored.content)
         assert content["action"] == "member_joined"
         await db.close()
@@ -285,13 +286,13 @@ class TestJoinEndpointNotification:
         assert response.status_code == 200
         assert response.json()["status"] == "accepted"
 
-        # Verify notification was persisted
+        # Verify notification was persisted to inbox
         async def _check() -> None:
             db = DatabaseManager(db_path)
             await db.initialize()
             async with db.connection() as conn:
                 cursor = await conn.execute(
-                    "SELECT * FROM message_queue WHERE message_type = 'system'",
+                    "SELECT * FROM inbox WHERE message_type = 'system'",
                 )
                 rows = await cursor.fetchall()
             assert len(rows) == 1
@@ -348,7 +349,7 @@ class TestJoinEndpointNotification:
             await db.initialize()
             async with db.connection() as conn:
                 cursor = await conn.execute(
-                    "SELECT * FROM message_queue WHERE message_type = 'system'",
+                    "SELECT * FROM inbox WHERE message_type = 'system'",
                 )
                 rows = await cursor.fetchall()
             assert len(rows) == 1
@@ -402,7 +403,7 @@ class TestJoinEndpointNotification:
             await db.initialize()
             async with db.connection() as conn:
                 cursor = await conn.execute(
-                    "SELECT COUNT(*) FROM message_queue WHERE message_type = 'system'",
+                    "SELECT COUNT(*) FROM inbox WHERE message_type = 'system'",
                 )
                 count = (await cursor.fetchone())[0]
             assert count == 0

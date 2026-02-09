@@ -199,6 +199,154 @@ swarm status [--verbose] [--json]
 | `--verbose` | `-v` | No | Show detailed status including swarms |
 | `--json` | | No | Output as JSON |
 
+### swarm messages
+
+List and manage received messages via the server inbox API. Automatically marks unread messages as read after display unless `--no-mark-read` is specified.
+
+```bash
+# List unread messages (default)
+swarm messages --swarm <id>
+
+# List messages by status
+swarm messages --swarm <id> --status read
+swarm messages --swarm <id> --status archived
+swarm messages --swarm <id> --status all
+
+# Show inbox counts
+swarm messages --swarm <id> --count
+
+# Archive a specific message
+swarm messages --archive <message-id>
+
+# Soft-delete a specific message
+swarm messages --delete <message-id>
+
+# Archive all read messages in a swarm
+swarm messages --swarm <id> --archive-all
+
+# Legacy: mark a message as completed
+swarm messages --ack <message-id>
+```
+
+| Option | Short | Required | Description |
+|--------|-------|----------|-------------|
+| `--swarm` | `-s` | Yes* | Swarm ID to list messages for |
+| `--limit` | `-l` | No | Maximum messages to show (default: 10) |
+| `--status` | | No | Filter by status: `unread` (default), `read`, `archived`, `all` |
+| `--no-mark-read` | | No | Do not auto-mark unread messages as read after listing |
+| `--count` | | No | Show inbox counts only (unread, read, total) |
+| `--archive` | | No | Archive a specific message by ID |
+| `--delete` | | No | Soft-delete a specific message by ID |
+| `--archive-all` | | No | Archive all read messages in the swarm |
+| `--ack` | | No | Legacy: mark a message as completed |
+| `--json` | | No | Output as JSON |
+
+*Required for `--count`, `--archive-all`, and listing modes. Not required for `--archive`, `--delete`, or `--ack`.
+
+**Message Status Lifecycle:**
+```
+unread --> read --> archived --> deleted --> purged (permanent)
+```
+
+### swarm sent
+
+List sent messages from the local outbox.
+
+```bash
+# List sent messages
+swarm sent --swarm <id>
+
+# Show count only
+swarm sent --swarm <id> --count
+
+# Limit results
+swarm sent --swarm <id> --limit 50
+```
+
+| Option | Short | Required | Description |
+|--------|-------|----------|-------------|
+| `--swarm` | `-s` | Yes | Swarm ID to list sent messages for |
+| `--limit` | `-l` | No | Maximum messages to show (default: 20) |
+| `--count` | | No | Show count only |
+| `--json` | | No | Output as JSON |
+
+### swarm purge
+
+Permanently remove soft-deleted inbox messages and expired SDK sessions.
+
+```bash
+# Purge deleted messages older than 24 hours (default retention)
+swarm purge --messages --yes
+
+# Purge all deleted messages regardless of age
+swarm purge --messages --force --yes
+
+# Also purge archived messages
+swarm purge --messages --include-archived --yes
+
+# Purge expired sessions (idle > 60 minutes)
+swarm purge --sessions --yes
+
+# Purge both messages and sessions
+swarm purge --messages --sessions --yes
+
+# Custom retention window
+swarm purge --messages --retention-hours 48 --yes
+```
+
+| Option | Short | Required | Description |
+|--------|-------|----------|-------------|
+| `--messages` | | No* | Purge soft-deleted inbox messages |
+| `--sessions` | | No* | Purge expired SDK sessions |
+| `--include-archived` | | No | Also purge archived messages (with `--messages`) |
+| `--retention-hours` | | No | Only purge messages deleted more than N hours ago (default: 24) |
+| `--force` | | No | Bypass retention window and purge all deleted messages |
+| `--timeout-minutes` | | No | Session timeout threshold in minutes (default: 60) |
+| `--yes` | `-y` | No | Skip confirmation prompt |
+| `--json` | | No | Output as JSON |
+
+*At least one of `--messages` or `--sessions` is required.
+
+### swarm export
+
+Export agent state (swarms, members, mutes, keys, inbox, outbox) to a JSON file.
+
+```bash
+# Export to file
+swarm export --output state-backup.json
+
+# Export to stdout
+swarm export
+```
+
+| Option | Short | Required | Description |
+|--------|-------|----------|-------------|
+| `--output` | `-o` | No | Output file path (default: stdout) |
+| `--json` | | No | Output as JSON |
+
+The export format uses schema version 2.0.0 with `inbox` and `outbox` arrays.
+
+### swarm import
+
+Import agent state from a JSON file. Supports both schema version 1.0.0 (legacy `message_queue`) and 2.0.0 (inbox/outbox).
+
+```bash
+# Full replace (clears existing state)
+swarm import --input state-backup.json --yes
+
+# Merge with existing state
+swarm import --input state-backup.json --merge --yes
+```
+
+| Option | Short | Required | Description |
+|--------|-------|----------|-------------|
+| `--input` | `-i` | Yes | JSON file to import |
+| `--merge` | | No | Merge with existing state (default: full replace) |
+| `--yes` | `-y` | No | Skip confirmation prompt |
+| `--json` | | No | Output as JSON |
+
+When importing a 1.0.0 export, legacy `message_queue` entries are mapped to the inbox with status conversion: `pending`/`processing` become `unread`, `completed`/`failed` become `read`.
+
 ## JSON Output
 
 All commands support `--json` flag for machine-readable output. JSON output is suitable for scripting and automation.
