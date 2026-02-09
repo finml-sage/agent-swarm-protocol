@@ -34,8 +34,37 @@ class MessageRepository:
     async def get_pending_count(self, swarm_id: str) -> int:
         c = await self._conn.execute("SELECT COUNT(*) FROM message_queue WHERE swarm_id = ? AND status = ?", (swarm_id, MessageStatus.PENDING.value))
         return (await c.fetchone())[0]
+    async def list_by_status(self, swarm_id: str, status: MessageStatus | None = None, limit: int = 10) -> list[QueuedMessage]:
+        """List messages for a swarm, optionally filtered by status.
+
+        Args:
+            swarm_id: The swarm to query messages for.
+            status: Filter to this status, or None for all statuses.
+            limit: Maximum number of messages to return (capped at 100).
+
+        Returns:
+            List of QueuedMessage ordered most-recent first.
+
+        Raises:
+            ValueError: If limit is not a positive integer.
+        """
+        if not isinstance(limit, int) or limit < 1:
+            raise ValueError(f"limit must be a positive integer, got {limit!r}")
+        capped = min(limit, _MAX_RECENT_LIMIT)
+        if status is not None:
+            c = await self._conn.execute(
+                "SELECT * FROM message_queue WHERE swarm_id = ? AND status = ? ORDER BY received_at DESC LIMIT ?",
+                (swarm_id, status.value, capped),
+            )
+        else:
+            c = await self._conn.execute(
+                "SELECT * FROM message_queue WHERE swarm_id = ? ORDER BY received_at DESC LIMIT ?",
+                (swarm_id, capped),
+            )
+        rows = await c.fetchall()
+        return [self._row_to_message(r) for r in rows]
     async def get_recent(self, swarm_id: str, limit: int = 10) -> list[QueuedMessage]:
-        """Get recent completed or received messages for a swarm.
+        """Get recent completed messages for a swarm.
 
         Returns up to ``limit`` messages ordered by received_at descending.
         Only messages with COMPLETED status are included (already processed).
@@ -50,15 +79,7 @@ class MessageRepository:
         Raises:
             ValueError: If limit is not a positive integer.
         """
-        if not isinstance(limit, int) or limit < 1:
-            raise ValueError(f"limit must be a positive integer, got {limit!r}")
-        capped = min(limit, _MAX_RECENT_LIMIT)
-        c = await self._conn.execute(
-            "SELECT * FROM message_queue WHERE swarm_id = ? AND status = ? ORDER BY received_at DESC LIMIT ?",
-            (swarm_id, MessageStatus.COMPLETED.value, capped),
-        )
-        rows = await c.fetchall()
-        return [self._row_to_message(r) for r in rows]
+        return await self.list_by_status(swarm_id, MessageStatus.COMPLETED, limit)
     async def purge_old(self, retention_days: int) -> int:
         c = await self._conn.execute("DELETE FROM message_queue WHERE status IN (?, ?) AND processed_at < ?", (MessageStatus.COMPLETED.value, MessageStatus.FAILED.value, (datetime.now(timezone.utc) - timedelta(days=retention_days)).isoformat()))
         await self._conn.commit()
