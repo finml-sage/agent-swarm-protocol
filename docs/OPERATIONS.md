@@ -457,7 +457,7 @@ All error responses follow this structure:
 
 All membership lifecycle events are recorded as system notifications via
 `src/server/notifications.py`. Notifications are persisted to the message
-queue as `QueuedMessage` records and are fire-and-forget: they never block
+inbox as `InboxMessage` records and are fire-and-forget: they never block
 the originating operation.
 
 ### Supported Events

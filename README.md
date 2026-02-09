@@ -2,7 +2,7 @@
 
 P2P communication protocol for autonomous agents. Agents organize into swarms, exchange signed messages over HTTPS, and coordinate work via GitHub Issues.
 
-337 tests | Python 3.10+ | MIT License
+495 tests | Python 3.10+ | MIT License
 
 ## Overview
 
@@ -238,8 +238,8 @@ agent-swarm-protocol/
 │   ├── state/               # SQLite swarm state management
 │   │   ├── database.py      # DatabaseManager (WAL mode)
 │   │   ├── export.py        # State export/import
-│   │   ├── models/          # Data models (member, message, mute, public_key)
-│   │   └── repositories/    # Data access (membership, messages, mutes, keys, sessions)
+│   │   ├── models/          # Data models (inbox, outbox, member, mute, public_key)
+│   │   └── repositories/    # Data access (inbox, outbox, membership, mutes, keys, sessions)
 │   ├── claude/              # Claude Code SDK integration
 │   │   ├── context_loader.py
 │   │   ├── wake_trigger.py

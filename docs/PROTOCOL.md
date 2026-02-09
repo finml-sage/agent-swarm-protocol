@@ -321,7 +321,7 @@ notification to the message queue and broadcasts to all existing members.
 ### 5.7 Lifecycle Event Notifications
 
 Membership lifecycle events generate system notifications that are persisted
-to the message queue via `src/server/notifications.py`. These notifications
+to the inbox via `src/server/notifications.py`. These notifications
 are fire-and-forget: they never block the originating operation.
 
 **Supported lifecycle actions:**
@@ -347,8 +347,8 @@ are fire-and-forget: they never block the originating operation.
 }
 ```
 
-Notifications are stored as `QueuedMessage` records with `message_type=system`.
-They can be retrieved via `MessageRepository.get_recent()` for context loading.
+Notifications are stored as `InboxMessage` records with `message_type=system`.
+They can be retrieved via `InboxRepository.list_recent()` for context loading.
 
 ## 6. Endpoints
 
@@ -615,24 +615,25 @@ When importing:
 3. Merge or replace based on agent configuration
 4. Remove `exported_at` field after import
 
-### 9.6 Message Queue and Persistence
+### 9.6 Inbox and Message Persistence
 
-Incoming messages are persisted to SQLite before being added to the in-memory
-queue. Persistence is handled by `MessageRepository` in
-`src/state/repositories/messages.py`.
+Incoming messages are persisted to the `inbox` table in SQLite.
+Persistence is handled by `InboxRepository` in
+`src/state/repositories/inbox.py`.
 
 **Schema:**
 ```sql
-CREATE TABLE message_queue (
-  message_id TEXT PRIMARY KEY,
-  swarm_id TEXT,
-  sender_id TEXT,
-  message_type TEXT,
-  content TEXT,
-  received_at TEXT,
-  processed_at TEXT,
-  status TEXT DEFAULT 'pending',
-  error TEXT
+CREATE TABLE inbox (
+  message_id   TEXT PRIMARY KEY,
+  swarm_id     TEXT NOT NULL,
+  sender_id    TEXT NOT NULL,
+  recipient_id TEXT,
+  message_type TEXT NOT NULL,
+  content      TEXT NOT NULL,
+  received_at  TEXT NOT NULL,
+  read_at      TEXT,
+  deleted_at   TEXT,
+  status       TEXT NOT NULL DEFAULT 'unread'
 );
 ```
 
@@ -640,19 +641,21 @@ CREATE TABLE message_queue (
 `message_id` is silently ignored via an `IntegrityError` catch. The
 response is always `{"status": "queued"}`.
 
-**Message statuses:** `pending`, `processing`, `completed`, `failed`
+**Inbox statuses:** `unread`, `read`, `archived`, `deleted`
 
-**`get_recent()` method:** Retrieves recently completed messages for a swarm,
+**`list_recent()` method:** Retrieves recent non-deleted messages for a swarm,
 ordered by `received_at` descending. The `limit` parameter is capped at 100.
 This is used by the context loader to provide conversation history to the
 Claude subagent.
 
+**Outbound messages** are tracked in the `outbox` table via `OutboxRepository`.
+Outbox statuses: `sent`, `delivered`, `failed`.
+
 **Lifecycle:**
 1. Message received at `POST /swarm/message`
-2. Persisted to SQLite via `MessageRepository.enqueue()`
-3. Added to in-memory queue for immediate processing
-4. Wake trigger evaluates the message (if configured)
-5. Status transitions: pending -> processing -> completed/failed
+2. Persisted to inbox via `InboxRepository.insert()`
+3. Wake trigger evaluates the message (if configured)
+4. Status transitions: unread -> read -> archived/deleted
 
 ## 10. Claude Code Integration
 

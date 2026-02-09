@@ -54,9 +54,11 @@ class TestExportCommand:
             assert result.exit_code == 0
             data = json.loads(result.stdout)
             assert data["agent_id"] == "test-agent"
-            assert data["schema_version"] == "1.0.0"
+            assert data["schema_version"] == "2.0.0"
             assert "swarms" in data
             assert "muted_agents" in data
+            assert "inbox" in data
+            assert "outbox" in data
 
     def test_export_to_file(self, monkeypatch):
         """Export with -o writes state to file."""
@@ -74,7 +76,7 @@ class TestExportCommand:
             with open(output_path) as f:
                 data = json.load(f)
             assert data["agent_id"] == "test-agent"
-            assert data["schema_version"] == "1.0.0"
+            assert data["schema_version"] == "2.0.0"
 
     def test_export_json_flag(self, monkeypatch):
         """Export with --json outputs JSON even with -o."""

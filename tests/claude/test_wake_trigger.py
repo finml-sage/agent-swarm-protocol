@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 from src.state import DatabaseManager
-from src.state.models import QueuedMessage, MessageStatus
+from src.state.models.inbox import InboxMessage, InboxStatus
 from src.claude.wake_trigger import (
     WakeTrigger,
     WakeDecision,
@@ -30,16 +30,16 @@ class TestWakeTrigger:
         return manager
 
     @pytest.fixture
-    def sample_message(self) -> QueuedMessage:
-        """Create sample queued message."""
-        return QueuedMessage(
+    def sample_message(self) -> InboxMessage:
+        """Create sample inbox message."""
+        return InboxMessage(
             message_id="msg-123",
             swarm_id="swarm-456",
             sender_id="agent-sender",
             message_type="message",
             content="Hello swarm!",
             received_at=datetime.now(timezone.utc),
-            status=MessageStatus.PENDING,
+            status=InboxStatus.UNREAD,
         )
 
     @pytest.fixture
@@ -66,7 +66,7 @@ class TestWakeTrigger:
     async def test_process_message_wake_decision(
         self,
         db_manager: DatabaseManager,
-        sample_message: QueuedMessage,
+        sample_message: InboxMessage,
         default_prefs: NotificationPreferences,
     ) -> None:
         """Process message should return WAKE for normal message."""
@@ -92,7 +92,7 @@ class TestWakeTrigger:
     async def test_process_muted_sender_skips(
         self,
         db_manager: DatabaseManager,
-        sample_message: QueuedMessage,
+        sample_message: InboxMessage,
         default_prefs: NotificationPreferences,
     ) -> None:
         """Muted sender should result in SKIP decision."""
@@ -113,7 +113,7 @@ class TestWakeTrigger:
     async def test_process_muted_swarm_skips(
         self,
         db_manager: DatabaseManager,
-        sample_message: QueuedMessage,
+        sample_message: InboxMessage,
         default_prefs: NotificationPreferences,
     ) -> None:
         """Muted swarm should result in SKIP decision."""
@@ -134,7 +134,7 @@ class TestWakeTrigger:
     async def test_process_silent_queues(
         self,
         db_manager: DatabaseManager,
-        sample_message: QueuedMessage,
+        sample_message: InboxMessage,
     ) -> None:
         """SILENT notification level should result in QUEUE."""
         prefs = NotificationPreferences(
@@ -152,7 +152,7 @@ class TestWakeTrigger:
     async def test_callback_notified(
         self,
         db_manager: DatabaseManager,
-        sample_message: QueuedMessage,
+        sample_message: InboxMessage,
         default_prefs: NotificationPreferences,
     ) -> None:
         """Registered callbacks should be called with event."""
@@ -181,7 +181,7 @@ class TestWakeTrigger:
     async def test_wake_posts_to_endpoint(
         self,
         db_manager: DatabaseManager,
-        sample_message: QueuedMessage,
+        sample_message: InboxMessage,
         default_prefs: NotificationPreferences,
     ) -> None:
         """WAKE decision should POST to wake endpoint."""
@@ -208,7 +208,7 @@ class TestWakeTrigger:
     async def test_wake_endpoint_error_raises(
         self,
         db_manager: DatabaseManager,
-        sample_message: QueuedMessage,
+        sample_message: InboxMessage,
         default_prefs: NotificationPreferences,
     ) -> None:
         """Failed POST should raise WakeTriggerError."""
