@@ -204,7 +204,7 @@ re-synchronize their local state without side effects.
 ### Side Effects
 
 On genuinely new joins, the master persists a `member_joined` notification
-to the message queue. The notification is fire-and-forget and never blocks
+to the inbox. The notification is fire-and-forget and never blocks
 the join response. Master broadcasts `member_joined` notification to all existing members:
 
 ```json
@@ -487,7 +487,7 @@ Each notification is stored as a system message with this content structure:
 
 ### Integration with Wake Trigger
 
-Lifecycle notifications are persisted to the same message queue used by the
+Lifecycle notifications are persisted to the same inbox used by the
 wake trigger. If `WAKE_ENABLED=true`, the wake trigger evaluates these
 system messages against the agent's notification preferences. Agents
 configured with `SWARM_SYSTEM_MESSAGE` in their wake conditions will be

@@ -28,8 +28,8 @@ The project provides three components:
 │  │  (httpx)  │  │         │  │  (httpx)  │  │
 │  └───────────┘  │         │  └───────────┘  │
 │  ┌───────────┐  │         │  ┌───────────┐  │
-│  │  Claude   │  │         │  │  Claude   │  │
-│  │  Code SDK │  │         │  │  Code SDK │  │
+│  │   Wake    │  │         │  │   Wake    │  │
+│  │  (tmux)   │  │         │  │  (tmux)   │  │
 │  └───────────┘  │         │  └───────────┘  │
 └─────────────────┘         └─────────────────┘
 ```
@@ -194,14 +194,14 @@ agent-swarm-protocol/
 │   ├── INVITE-TOKENS.md     # Invite token format (JWT/EdDSA)
 │   ├── HOST-DEPLOYMENT.md   # Host-based deployment guide
 │   ├── CLI.md               # CLI command reference
-
-│   ├── CLAUDE-INTEGRATION.md # Claude Code SDK integration
+│   ├── CLAUDE-INTEGRATION.md # Claude Code integration and wake system
 │   ├── ENVIRONMENT.md       # Environment variable reference
 │   └── api/                 # Per-endpoint API docs
 │       ├── endpoint-health.md
 │       ├── endpoint-info.md
 │       ├── endpoint-join.md
 │       ├── endpoint-message.md
+│       ├── endpoint-wake.md
 │       └── headers-errors.md
 ├── schemas/
 │   ├── message.json         # Message JSON Schema (2020-12)
@@ -214,7 +214,6 @@ agent-swarm-protocol/
 │   ├── server/              # FastAPI message handler
 │   │   ├── app.py           # Application factory
 │   │   ├── config.py        # Server configuration
-│   │   ├── invoke_sdk.py    # Claude Agent SDK invocation
 │   │   ├── invoke_tmux.py   # Tmux session invocation
 │   │   ├── invoker.py       # Pluggable agent invocation (sdk/tmux/subprocess/webhook/noop)
 │   │   ├── notifications.py # Lifecycle event notification service
@@ -224,13 +223,23 @@ agent-swarm-protocol/
 │   │   ├── ssl.conf             # TLS/SSL config
 │   │   ├── middleware/      # Rate limiting, logging
 │   │   ├── models/          # Pydantic request/response models
-│   │   └── routes/          # Endpoint handlers (health, info, join, message, wake)
+│   │   └── routes/          # Endpoint handlers
+│   │       ├── health.py    # GET /swarm/health
+│   │       ├── inbox.py     # Inbox query endpoints
+│   │       ├── info.py      # GET /swarm/info
+│   │       ├── join.py      # POST /swarm/join
+│   │       ├── message.py   # POST /swarm/message
+│   │       ├── outbox.py    # Outbox query endpoints
+│   │       └── wake.py      # POST /api/wake
 │   ├── client/              # Python client library
+│   │   ├── _constants.py    # Shared constants
 │   │   ├── client.py        # SwarmClient (HTTP/2 via httpx)
 │   │   ├── crypto.py        # Ed25519 signing/verification
 │   │   ├── message.py       # Message model
+│   │   ├── messaging.py     # High-level messaging helpers
 │   │   ├── builder.py       # MessageBuilder
 │   │   ├── operations.py    # Swarm operation helpers
+│   │   ├── persist.py       # Message persistence helpers
 │   │   ├── tokens.py        # Invite token handling (JWT/EdDSA)
 │   │   ├── transport.py     # HTTP transport layer
 │   │   ├── types.py         # Type definitions
@@ -238,22 +247,32 @@ agent-swarm-protocol/
 │   ├── state/               # SQLite swarm state management
 │   │   ├── database.py      # DatabaseManager (WAL mode)
 │   │   ├── export.py        # State export/import
-│   │   ├── models/          # Data models (inbox, outbox, member, mute, public_key)
+│   │   ├── join.py          # Join swarm state helpers
+│   │   ├── session_service.py # Session lifecycle service
+│   │   ├── token.py         # Token state helpers
+│   │   ├── models/          # Data models (inbox, outbox, member, mute, public_key, session)
 │   │   └── repositories/    # Data access (inbox, outbox, membership, mutes, keys, sessions)
-│   ├── claude/              # Claude Code SDK integration
+│   ├── claude/              # Claude Code integration and wake system
 │   │   ├── context_loader.py
 │   │   ├── wake_trigger.py
 │   │   ├── response_handler.py
 │   │   ├── session_manager.py
-│   │   └── notification_preferences.py
+│   │   ├── notification_preferences.py
+│   │   └── swarm-subagent/  # Subagent configuration
 │   └── cli/                 # CLI (Typer + Rich)
 │       ├── main.py          # Entry point, app definition
 │       ├── commands/        # Per-command modules (init, create, invite, ...)
 │       ├── output/          # Formatters and JSON output
 │       └── utils/           # Config loading, input validation
 └── tests/                   # Test suite
-    ├── test_server.py
     ├── conftest.py          # Shared fixtures
+    ├── test_server.py
+    ├── test_event_notifications.py
+    ├── test_inbox_api.py
+    ├── test_invoke_tmux.py
+    ├── test_message_persistence.py
+    ├── test_wake_endpoint.py
+    ├── test_wake_trigger_wiring.py
     ├── claude/              # Claude integration tests
     ├── cli/                 # CLI command tests
     ├── client/              # Client library tests

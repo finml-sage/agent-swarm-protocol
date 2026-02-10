@@ -40,7 +40,7 @@ Content-Type: application/json
   "agent_id": "agent-receiver-456",
   "protocol_version": "0.1.0",
   "timestamp": "2026-02-05T14:30:00.000Z",
-  "message": "Message queue backlog exceeds threshold"
+  "message": "Inbox backlog exceeds threshold"
 }
 ```
 

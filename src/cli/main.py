@@ -164,7 +164,6 @@ def messages(
         False, "--no-mark-read", help="Don't auto-mark unread messages as read",
     ),
     count: bool = typer.Option(False, "--count", help="Show inbox counts only"),
-    ack: str = typer.Option(None, "--ack", help="Mark message as completed"),
     archive_all: bool = typer.Option(
         False, "--archive-all", help="Archive all read messages in swarm",
     ),
@@ -173,7 +172,7 @@ def messages(
     """List and manage received messages."""
     messages_command(
         swarm_id, limit, status_filter, archive, delete,
-        no_mark_read, count, json_flag, ack, archive_all,
+        no_mark_read, count, json_flag, archive_all,
     )
 
 

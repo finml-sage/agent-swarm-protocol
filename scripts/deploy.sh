@@ -12,12 +12,12 @@
 set -euo pipefail
 
 # --- Configuration (override via environment) ---
-REPO_DIR="${REPO_DIR:-/opt/sage/agent-swarm-protocol}"
+REPO_DIR="${REPO_DIR:-/opt/agent-swarm-protocol}"
 VENV_DIR="${REPO_DIR}/venv"
 TEMPLATE="${REPO_DIR}/src/server/angie.conf.template"
-LIVE_CONF="${LIVE_CONF:-/etc/angie/http.d/self-wake.conf}"
-SERVICE_NAME="${SERVICE_NAME:-swarm-agent}"
-HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8081/swarm/health}"
+LIVE_CONF="${LIVE_CONF:-/etc/angie/angie.conf}"
+SERVICE_NAME="${SERVICE_NAME:-swarm-server}"
+HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:8080/swarm/health}"
 HEALTH_RETRIES="${HEALTH_RETRIES:-5}"
 HEALTH_DELAY="${HEALTH_DELAY:-2}"
 
@@ -150,7 +150,7 @@ if [ -f "$LIVE_CONF" ]; then
         warn "Live:     $LIVE_CONF"
         warn ""
         warn "The template is a full standalone config, while the live config is a"
-        warn "server-block include with additional services (selfwake, /content/, etc.)."
+        warn "server-block include that may contain additional location blocks."
         warn "Do NOT blindly copy the template over the live config."
         warn ""
         warn "To sync manually:"
@@ -215,7 +215,7 @@ else
     info "Step 5/7: Skipping Angie sync (use --sync-angie to enable)"
 fi
 
-# --- Step 6: Restart swarm-agent ---
+# --- Step 6: Restart service ---
 info "Step 6/7: Restarting $SERVICE_NAME..."
 run systemctl restart "$SERVICE_NAME"
 

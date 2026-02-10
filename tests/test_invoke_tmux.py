@@ -234,20 +234,20 @@ class TestAgentInvokerTmux:
         """Tmux method is accepted (no SDK required)."""
         tmux_cfg = TmuxInvokeConfig(tmux_target="main:0")
         invoker = AgentInvoker(
-            method="tmux", target="", tmux_config=tmux_cfg,
+            method="tmux", tmux_config=tmux_cfg,
         )
         assert invoker.method == "tmux"
 
     def test_tmux_rejects_missing_config(self) -> None:
         """Tmux method raises if tmux_config is not provided."""
         with pytest.raises(ValueError, match="tmux_config required"):
-            AgentInvoker(method="tmux", target="")
+            AgentInvoker(method="tmux")
 
     def test_tmux_allows_empty_target(self) -> None:
         """Tmux method does not require a target (uses tmux_config instead)."""
         tmux_cfg = TmuxInvokeConfig(tmux_target="main:0")
         invoker = AgentInvoker(
-            method="tmux", target="", tmux_config=tmux_cfg,
+            method="tmux", tmux_config=tmux_cfg,
         )
         assert invoker.method == "tmux"
 
@@ -256,7 +256,7 @@ class TestAgentInvokerTmux:
         """AgentInvoker.invoke delegates to invoke_tmux."""
         tmux_cfg = TmuxInvokeConfig(tmux_target="main:0")
         invoker = AgentInvoker(
-            method="tmux", target="", tmux_config=tmux_cfg,
+            method="tmux", tmux_config=tmux_cfg,
         )
         with patch(
             "src.server.invoke_tmux.invoke_tmux", new_callable=AsyncMock,

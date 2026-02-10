@@ -177,16 +177,6 @@ class TestMessagesWithoutInit:
         assert result.exit_code == 1
         assert "swarm init" in result.stdout.lower()
 
-    def test_messages_ack_without_init(self, monkeypatch):
-        with TemporaryDirectory() as tmpdir:
-            config_dir = Path(tmpdir) / "swarm"
-            monkeypatch.setattr(ConfigManager, "DEFAULT_DIR", config_dir)
-
-            result = runner.invoke(app, ["messages", "--ack", MSG_ID])
-
-        assert result.exit_code == 1
-        assert "swarm init" in result.stdout.lower()
-
 
 # ---------------------------------------------------------------------------
 # List mode tests (mocking HTTP calls)
@@ -396,78 +386,6 @@ class TestMessagesCount:
         data = json.loads(result.stdout)
         assert data["unread"] == 3
         assert data["swarm_id"] == SWARM_ID
-
-
-# ---------------------------------------------------------------------------
-# Ack mode tests
-# ---------------------------------------------------------------------------
-
-
-class TestMessagesAck:
-    """Messages --ack mode tests."""
-
-    @patch("src.cli.commands.messages._ack_message", new_callable=AsyncMock)
-    @patch("src.cli.commands.messages._load_base_url", return_value=BASE_URL)
-    def test_ack_success(self, mock_url, mock_ack, monkeypatch):
-        """Ack marks message as completed."""
-        mock_ack.return_value = {"status": "acked", "message_id": MSG_ID}
-
-        with TemporaryDirectory() as tmpdir:
-            config_dir = Path(tmpdir) / "swarm"
-            _init_agent(monkeypatch, config_dir)
-
-            result = runner.invoke(app, ["messages", "--ack", MSG_ID])
-
-        assert result.exit_code == 0
-        assert "completed" in result.stdout
-
-    @patch("src.cli.commands.messages._ack_message", new_callable=AsyncMock)
-    @patch("src.cli.commands.messages._load_base_url", return_value=BASE_URL)
-    def test_ack_not_found(self, mock_url, mock_ack, monkeypatch):
-        """Ack with unknown message ID fails with exit 5."""
-        mock_ack.return_value = {"status": "not_found", "message_id": MSG_ID}
-
-        with TemporaryDirectory() as tmpdir:
-            config_dir = Path(tmpdir) / "swarm"
-            _init_agent(monkeypatch, config_dir)
-
-            result = runner.invoke(app, ["messages", "--ack", MSG_ID])
-
-        assert result.exit_code == 5
-        assert "not found" in result.stdout
-
-    @patch("src.cli.commands.messages._ack_message", new_callable=AsyncMock)
-    @patch("src.cli.commands.messages._load_base_url", return_value=BASE_URL)
-    def test_ack_json_success(self, mock_url, mock_ack, monkeypatch):
-        """Ack with --json outputs valid JSON."""
-        mock_ack.return_value = {"status": "acked", "message_id": MSG_ID}
-
-        with TemporaryDirectory() as tmpdir:
-            config_dir = Path(tmpdir) / "swarm"
-            _init_agent(monkeypatch, config_dir)
-
-            result = runner.invoke(app, ["messages", "--ack", MSG_ID, "--json"])
-
-        assert result.exit_code == 0
-        data = json.loads(result.stdout)
-        assert data["status"] == "acked"
-        assert data["message_id"] == MSG_ID
-
-    @patch("src.cli.commands.messages._ack_message", new_callable=AsyncMock)
-    @patch("src.cli.commands.messages._load_base_url", return_value=BASE_URL)
-    def test_ack_json_not_found(self, mock_url, mock_ack, monkeypatch):
-        """Ack --json with unknown ID returns not_found status."""
-        mock_ack.return_value = {"status": "not_found", "message_id": MSG_ID}
-
-        with TemporaryDirectory() as tmpdir:
-            config_dir = Path(tmpdir) / "swarm"
-            _init_agent(monkeypatch, config_dir)
-
-            result = runner.invoke(app, ["messages", "--ack", MSG_ID, "--json"])
-
-        assert result.exit_code == 0
-        data = json.loads(result.stdout)
-        assert data["status"] == "not_found"
 
 
 # ---------------------------------------------------------------------------
