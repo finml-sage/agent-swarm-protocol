@@ -77,8 +77,7 @@ Optional wake system variables:
 | `WAKE_TIMEOUT` | HTTP timeout for wake POSTs in seconds | `5.0` |
 | `WAKE_EP_ENABLED` | Enable `/api/wake` endpoint (inbound POST receiver) | `true` |
 | `WAKE_EP_INVOKE_METHOD` | Agent invocation method: `tmux`, `noop` | `noop` |
-| `WAKE_EP_INVOKE_TARGET` | Command template (required for tmux) | -- |
-| `WAKE_EP_TMUX_TARGET` | tmux session:window.pane target for invocation | -- |
+| `WAKE_EP_TMUX_TARGET` | tmux session:window.pane target (required for tmux) | -- |
 | `WAKE_EP_SECRET` | Shared secret for `X-Wake-Secret` header auth | empty |
 | `WAKE_EP_SESSION_FILE` | Path to session state JSON | `data/session.json` |
 | `WAKE_EP_SESSION_TIMEOUT` | Minutes before session considered expired | `30` |

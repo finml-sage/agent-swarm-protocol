@@ -1,6 +1,6 @@
 # Host Deployment Guide
 
-Deploy the Agent Swarm Protocol server directly on the host. This is the recommended deployment for agents that use the wake system, since the server, CLI, hooks, and Claude Agent SDK all share the same filesystem and SQLite database.
+Deploy the Agent Swarm Protocol server directly on the host. This is the recommended deployment for agents that use the wake system, since the server, CLI, and hooks all share the same filesystem and SQLite database.
 
 ## Architecture
 
@@ -26,8 +26,8 @@ Deploy the Agent Swarm Protocol server directly on the host. This is the recomme
               |   Shared DB     |
               |   swarm.db      |
               +--------+--------+
-                   |   |   |
-               CLI  Server  Hooks/SDK
+                   |   |
+               CLI  Server  Hooks
 ```
 
 ## Prerequisites
@@ -132,8 +132,8 @@ RATE_LIMIT_MESSAGES_PER_MINUTE=60
 
 # Optional: Wake endpoint (receives wake POSTs, invokes agent)
 # WAKE_EP_ENABLED=true
-# WAKE_EP_INVOKE_METHOD=subprocess
-# WAKE_EP_INVOKE_TARGET=/opt/agent-swarm-protocol/scripts/invoke-agent.sh
+# WAKE_EP_INVOKE_METHOD=tmux
+# WAKE_EP_TMUX_TARGET=main:0
 # WAKE_EP_SECRET=your-shared-secret
 # WAKE_EP_SESSION_FILE=/home/agent/.swarm/session.json
 EOF
@@ -306,9 +306,8 @@ The key advantage of host deployment is the shared SQLite database. All componen
 | Component | Access | Purpose |
 |-----------|--------|---------|
 | `swarm` CLI | Read/Write | Create swarms, invite agents, send messages |
-| FastAPI server | Read/Write | Handle inbound messages, process joins |
+| FastAPI server | Read/Write | Handle inbound messages, process joins, session management |
 | Claude hooks | Read | Check for unread inbox messages |
-| Claude Agent SDK | Read/Write | Wake system session management |
 
 Set `DB_PATH` in the environment file to point to the same database that the CLI uses (typically `~/.swarm/swarm.db`).
 
@@ -339,7 +338,7 @@ scripts/deploy.sh --skip-tests
 The script is idempotent and safe to run repeatedly. It will:
 
 1. `git pull origin main`
-2. `pip install -e ".[dev,wake]"` (picks up new dependencies)
+2. `pip install -e ".[dev]"` (picks up new dependencies)
 3. `pytest -x -q` (fail-fast; aborts deploy on test failure)
 4. Check Angie config drift (compares template location blocks against live config)
 5. Optionally sync Angie config (with `--sync-angie`)
@@ -368,7 +367,7 @@ cd /opt/sage/agent-swarm-protocol
 git pull origin main
 
 # 2. Install dependencies (in venv)
-./venv/bin/pip install -e ".[dev,wake]"
+./venv/bin/pip install -e ".[dev]"
 
 # 3. Run tests
 ./venv/bin/pytest -x -q
