@@ -215,7 +215,7 @@ agent-swarm-protocol/
 │   │   ├── app.py           # Application factory
 │   │   ├── config.py        # Server configuration
 │   │   ├── invoke_tmux.py   # Tmux session invocation
-│   │   ├── invoker.py       # Pluggable agent invocation (sdk/tmux/subprocess/webhook/noop)
+│   │   ├── invoker.py       # Pluggable agent invocation (tmux/noop)
 │   │   ├── notifications.py # Lifecycle event notification service
 │   │   ├── angie.conf.template  # Angie reverse proxy config template
 │   │   ├── proxy_params.conf    # Proxy parameter defaults
