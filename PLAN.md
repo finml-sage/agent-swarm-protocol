@@ -129,7 +129,7 @@ Phase 2: Server                    Phase 3: Client                    Phase 4: S
 - `src/claude/session_manager.py`
 - `src/claude/notification_preferences.py`
 - `src/server/notifications.py` (lifecycle event notification service)
-- `src/server/invoker.py` (pluggable agent invocation: sdk/tmux/subprocess/webhook/noop)
+- `src/server/invoker.py` (pluggable agent invocation: tmux/noop)
 - `src/server/routes/wake.py` (POST /api/wake endpoint)
 - `docs/CLAUDE-INTEGRATION.md`
 
