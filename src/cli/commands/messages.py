@@ -144,10 +144,6 @@ def _load_base_url() -> str:
     return _server_base_url(agent_config.endpoint)
 
 
-def _truncate(text: str, length: int) -> str:
-    return text[:length] + "..." if len(text) > length else text
-
-
 def _handle_archive(archive_id: str, json_flag: bool) -> None:
     """Archive a specific message."""
     base_url = _load_base_url()
@@ -325,7 +321,7 @@ def messages_command(
             m["sender_id"],
             m["status"],
             m["received_at"][:19],
-            _truncate(m.get("content_preview", ""), 60),
+            m.get("content_preview", ""),
         )
         for m in msgs
     ]

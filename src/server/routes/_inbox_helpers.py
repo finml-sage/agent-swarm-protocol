@@ -16,5 +16,5 @@ def msg_to_response(m: InboxMessage) -> InboxMessageResponse:
         status=m.status.value,
         received_at=m.received_at.isoformat(),
         read_at=m.read_at.isoformat() if m.read_at else None,
-        content_preview=m.content[:200],
+        content_preview=m.content,
     )

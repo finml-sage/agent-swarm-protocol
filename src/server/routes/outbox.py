@@ -47,7 +47,7 @@ def create_outbox_router(db: DatabaseManager) -> APIRouter:
                 status=m.status.value,
                 sent_at=m.sent_at.isoformat(),
                 error=m.error,
-                content_preview=m.content[:200],
+                content_preview=m.content,
             )
             for m in messages
         ]
