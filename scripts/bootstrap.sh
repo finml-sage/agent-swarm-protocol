@@ -116,17 +116,20 @@ echo ""
 # ---------------------------------------------------------------------------
 step "Step 1/14: Collect agent identity"
 
-read -rp "Agent ID (e.g. kelvin): " AGENT_ID
+read -rp "Agent ID (e.g. my-agent): " AGENT_ID
 if [[ -z "$AGENT_ID" ]]; then
     error "Agent ID is required."
 fi
 
-read -rp "Domain name (e.g. mlops-kelvin.marbell.com): " DOMAIN
+read -rp "Domain name (e.g. agent.example.com): " DOMAIN
 if [[ -z "$DOMAIN" ]]; then
     error "Domain name is required."
 fi
 
 read -rp "Swarm join URL (optional, press Enter to skip): " JOIN_URL
+
+read -rp "Tmux session name for wake system [default: same as Agent ID]: " TMUX_TARGET
+TMUX_TARGET="${TMUX_TARGET:-$AGENT_ID}"
 
 AGENT_ENDPOINT="https://${DOMAIN}/swarm"
 
@@ -136,6 +139,7 @@ echo "  Agent ID:       ${AGENT_ID}"
 echo "  Domain:         ${DOMAIN}"
 echo "  Endpoint:       ${AGENT_ENDPOINT}"
 echo "  Join URL:       ${JOIN_URL:-<none>}"
+echo "  Tmux target:    ${TMUX_TARGET}"
 echo "  Install dir:    ${INSTALL_DIR}"
 echo "  DB path:        ${DB_PATH}"
 echo ""
@@ -343,7 +347,7 @@ WAKE_ENABLED=true
 WAKE_ENDPOINT=http://localhost:${UPSTREAM_PORT}/api/wake
 WAKE_EP_ENABLED=true
 WAKE_EP_INVOKE_METHOD=tmux
-WAKE_EP_TMUX_TARGET=${AGENT_ID}
+WAKE_EP_TMUX_TARGET=${TMUX_TARGET}
 ENVEOF
     chmod 600 "$ENV_FILE"
     info "Environment file written to ${ENV_FILE} (chmod 600)."
