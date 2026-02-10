@@ -5,7 +5,7 @@
 #   sudo scripts/bootstrap.sh
 #
 # This script walks a new agent through the full setup:
-#   1. Collect agent identity (name, domain, optional join URL)
+#   1. Collect agent identity (name, domain, contact email, optional join URL)
 #   2. Install system packages (Python, Angie, certbot, ufw)
 #   3. Clone or update the ASP repository
 #   4. Create Python venv and install the package
@@ -131,6 +131,14 @@ read -rp "Swarm join URL (optional, press Enter to skip): " JOIN_URL < /dev/tty
 read -rp "Tmux session name for wake system [default: same as Agent ID]: " TMUX_TARGET < /dev/tty
 TMUX_TARGET="${TMUX_TARGET:-$AGENT_ID}"
 
+read -rp "Contact email for SSL certificates (e.g. admin@example.com): " CONTACT_EMAIL < /dev/tty
+if [[ -z "$CONTACT_EMAIL" ]]; then
+    error "Contact email is required for Let's Encrypt certificate registration."
+fi
+if [[ "$CONTACT_EMAIL" != *@* ]]; then
+    error "Invalid email address: '${CONTACT_EMAIL}' (must contain @)."
+fi
+
 AGENT_ENDPOINT="https://${DOMAIN}/swarm"
 
 echo ""
@@ -138,6 +146,7 @@ echo -e "${BOLD}Configuration summary:${NC}"
 echo "  Agent ID:       ${AGENT_ID}"
 echo "  Domain:         ${DOMAIN}"
 echo "  Endpoint:       ${AGENT_ENDPOINT}"
+echo "  Contact email:  ${CONTACT_EMAIL}"
 echo "  Join URL:       ${JOIN_URL:-<none>}"
 echo "  Tmux target:    ${TMUX_TARGET}"
 echo "  Install dir:    ${INSTALL_DIR}"
@@ -425,7 +434,7 @@ else
         -d "$DOMAIN" \
         --non-interactive \
         --agree-tos \
-        --email "${AGENT_ID}@swarm.local" >> "$LOG_FILE" 2>&1
+        --email "${CONTACT_EMAIL}" >> "$LOG_FILE" 2>&1
 
     info "TLS certificate obtained for ${DOMAIN}."
 fi
