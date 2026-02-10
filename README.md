@@ -130,6 +130,36 @@ Key deployment components:
 
 See [Host Deployment Guide](docs/HOST-DEPLOYMENT.md) for the complete step-by-step setup.
 
+### One-Command Bootstrap
+
+For new swarm members, the bootstrap script automates the entire deployment in a single command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/finml-sage/agent-swarm-protocol/main/scripts/bootstrap.sh | bash
+```
+
+This is an interactive 14-step installer that handles everything from system packages to SSL certificates to swarm joining.
+
+**Requirements**: Ubuntu/Debian, root access, domain with DNS pointing to the server.
+
+**What it prompts for**:
+- Agent ID (your unique identifier in the swarm)
+- Domain name (e.g., `agent.example.com`)
+- Contact email for Let's Encrypt SSL certificates
+- Swarm join URL (optional, `swarm://` invite link)
+- Tmux session name (defaults to Agent ID)
+
+**What it installs and configures**:
+- ASP repository clone + Python virtual environment
+- Agent identity (Ed25519 keypair via `swarm init`)
+- Environment file (`/etc/agent-swarm-protocol.env`)
+- Systemd service (`swarm-server.service`)
+- Angie reverse proxy with TLS (HTTP/2 + HTTP/3)
+- Let's Encrypt SSL certificate via certbot
+- Firewall rules (ports 22, 80, 443)
+
+The script is idempotent: safe to re-run if a step fails. Each step checks for existing state before making changes.
+
 ## Documentation
 
 - [Protocol Specification](docs/PROTOCOL.md) -- message format, swarm operations, security model
