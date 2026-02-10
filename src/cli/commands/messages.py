@@ -2,8 +2,8 @@
 
 Uses the /api/inbox endpoints (issue #154-#156) which provide unread/read/
 archived/deleted status lifecycle.  Auto-marks unread messages as read after
-display unless --no-mark-read is specified.  Also supports --ack (legacy),
---archive, --delete, and --archive-all operations.
+display unless --no-mark-read is specified.  Also supports --archive,
+--delete, and --archive-all operations.
 """
 
 import asyncio
@@ -82,15 +82,6 @@ async def _batch_inbox_action(
         resp.raise_for_status()
         return resp.json()
 
-
-async def _ack_message(base_url: str, message_id: str) -> dict:
-    """POST /api/messages/{message_id}/ack on the server."""
-    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
-        resp = await client.post(f"{base_url}/api/messages/{message_id}/ack")
-        if resp.status_code in (200, 404):
-            return resp.json()
-        resp.raise_for_status()
-        return resp.json()
 
 
 async def _archive_message(base_url: str, message_id: str) -> dict:
@@ -183,18 +174,6 @@ def _handle_delete(delete_id: str, json_flag: bool) -> None:
         format_success(console, f"Message {delete_id[:12]}... deleted")
 
 
-def _handle_ack(ack_id: str, json_flag: bool) -> None:
-    """Ack (mark as completed) a specific message."""
-    base_url = _load_base_url()
-    data = _run_async(_ack_message(base_url, ack_id), "ack message")
-    if json_flag:
-        json_output(console, data)
-    elif data["status"] == "acked":
-        format_success(console, f"Message {ack_id[:12]}... marked as completed")
-    else:
-        format_error(console, f"Message {ack_id} not found")
-        raise typer.Exit(code=5)
-
 
 def _handle_archive_all(
     swarm_id: str, json_flag: bool,
@@ -244,7 +223,7 @@ def messages_command(
     swarm_id: str | None, limit: int, status_filter: str,
     archive: str | None, delete: str | None,
     no_mark_read: bool, count: bool, json_flag: bool,
-    ack: str | None = None, archive_all: bool = False,
+    archive_all: bool = False,
 ) -> None:
     """List and manage messages via the server inbox API."""
     # Archive mode
@@ -269,15 +248,6 @@ def messages_command(
     if archive_all:
         try:
             _handle_archive_all(swarm_id, json_flag)
-        except ConfigError as e:
-            format_error(console, str(e), hint="Run 'swarm init' first")
-            raise typer.Exit(code=1)
-        return
-
-    # Ack mode
-    if ack:
-        try:
-            _handle_ack(ack, json_flag)
         except ConfigError as e:
             format_error(console, str(e), hint="Run 'swarm init' first")
             raise typer.Exit(code=1)

@@ -1,6 +1,6 @@
 # Host Deployment Guide
 
-Deploy the Agent Swarm Protocol server directly on the host (without Docker). This is the recommended deployment for agents that use the wake system, since the server, CLI, hooks, and Claude Agent SDK all share the same filesystem and SQLite database.
+Deploy the Agent Swarm Protocol server directly on the host. This is the recommended deployment for agents that use the wake system, since the server, CLI, hooks, and Claude Agent SDK all share the same filesystem and SQLite database.
 
 ## Architecture
 
@@ -29,8 +29,6 @@ Deploy the Agent Swarm Protocol server directly on the host (without Docker). Th
                    |   |   |
                CLI  Server  Hooks/SDK
 ```
-
-Key difference from Docker: all processes access the same SQLite database file on the host filesystem. There is no container/host DB split.
 
 ## Prerequisites
 
@@ -127,7 +125,6 @@ AGENT_DESCRIPTION=A swarm protocol agent
 
 # Optional: Rate limiting
 RATE_LIMIT_MESSAGES_PER_MINUTE=60
-RATE_LIMIT_JOIN_PER_HOUR=10
 
 # Optional: Wake trigger (notifies agent on new messages)
 # WAKE_ENABLED=true
@@ -193,12 +190,9 @@ sudo systemctl enable swarm-server
 
 ## Step 6: Obtain TLS Certificates
 
-Stop any service using ports 80/443 (including Docker containers) before running certbot:
+Stop any service using ports 80/443 before running certbot:
 
 ```bash
-# Stop Docker containers if running
-docker compose down 2>/dev/null || true
-
 # Stop Angie if already running
 sudo systemctl stop angie 2>/dev/null || true
 
@@ -319,34 +313,6 @@ The key advantage of host deployment is the shared SQLite database. All componen
 Set `DB_PATH` in the environment file to point to the same database that the CLI uses (typically `~/.swarm/swarm.db`).
 
 SQLite handles concurrent access via WAL mode (write-ahead logging), which is enabled automatically by the `DatabaseManager` on initialization.
-
-## Migrating from Docker
-
-If you are migrating from a Docker deployment:
-
-1. **Stop Docker containers**:
-
-```bash
-cd /path/to/agent-swarm-protocol
-docker compose down
-```
-
-2. **Export the container database** (if it has data not in the host DB):
-
-```bash
-docker compose cp handler:/app/data/swarm.db /tmp/container-swarm.db
-```
-
-3. **Merge or replace** the host database with the container data as needed. If the host CLI database already has the same swarm data, skip this step.
-
-4. **Follow this guide** from Step 2 onwards.
-
-5. **Remove Docker resources** (optional):
-
-```bash
-docker compose down -v   # Remove volumes
-docker system prune -f   # Clean up
-```
 
 ## Deploying Updates
 

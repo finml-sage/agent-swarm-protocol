@@ -32,10 +32,6 @@ dev = [
     "black>=24.0.0",
     "ruff>=0.2.0",
 ]
-wake = [
-    "claude-agent-sdk>=0.1.0",
-]
-
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
 

@@ -23,7 +23,6 @@ def _make_config(
     tmp_path: Path,
     wake_ep_enabled: bool = True,
     invoke_method: str = "noop",
-    invoke_target: str = "",
     secret: str = "",
     session_timeout_minutes: int = 30,
 ) -> ServerConfig:
@@ -41,7 +40,6 @@ def _make_config(
         wake_endpoint=WakeEndpointConfig(
             enabled=wake_ep_enabled,
             invoke_method=invoke_method,
-            invoke_target=invoke_target,
             secret=secret,
             session_file=str(tmp_path / "session.json"),
             session_timeout_minutes=session_timeout_minutes,
@@ -120,11 +118,7 @@ class TestWakeEndpointFireAndForget:
         self, tmp_path: Path,
     ) -> None:
         """Even if the invoker raises, the endpoint already returned 202."""
-        config = _make_config(
-            tmp_path,
-            invoke_method="webhook",
-            invoke_target="http://localhost:9999/nonexistent",
-        )
+        config = _make_config(tmp_path, invoke_method="noop")
         with TestClient(create_app(config)) as client:
             response = client.post("/api/wake", json=_wake_payload())
         # Background task may fail, but response is already 202
@@ -145,7 +139,7 @@ class TestWakeEndpointConcurrencyLock:
         """When lock is held, a second background invocation is skipped."""
         from src.server.routes.wake import _invoke_lock
 
-        invoker = AgentInvoker(method="noop", target="")
+        invoker = AgentInvoker(method="noop")
         invocation_count = 0
 
         original_invoke = invoker.invoke
@@ -280,23 +274,30 @@ class TestAgentInvoker:
 
     def test_rejects_unknown_method(self) -> None:
         with pytest.raises(ValueError, match="Unknown invocation method"):
-            AgentInvoker(method="magic", target="something")
+            AgentInvoker(method="magic")
 
-    def test_rejects_empty_target_for_subprocess(self) -> None:
-        with pytest.raises(ValueError, match="target required"):
-            AgentInvoker(method="subprocess", target="")
+    def test_rejects_unknown_subprocess(self) -> None:
+        """Removed methods are now unknown."""
+        with pytest.raises(ValueError, match="Unknown invocation method"):
+            AgentInvoker(method="subprocess")
 
-    def test_rejects_empty_target_for_webhook(self) -> None:
-        with pytest.raises(ValueError, match="target required"):
-            AgentInvoker(method="webhook", target="")
+    def test_rejects_unknown_webhook(self) -> None:
+        """Removed methods are now unknown."""
+        with pytest.raises(ValueError, match="Unknown invocation method"):
+            AgentInvoker(method="webhook")
 
-    def test_noop_allows_empty_target(self) -> None:
-        invoker = AgentInvoker(method="noop", target="")
+    def test_rejects_unknown_sdk(self) -> None:
+        """Removed methods are now unknown."""
+        with pytest.raises(ValueError, match="Unknown invocation method"):
+            AgentInvoker(method="sdk")
+
+    def test_noop_creates_invoker(self) -> None:
+        invoker = AgentInvoker(method="noop")
         assert invoker.method == "noop"
 
     @pytest.mark.asyncio
     async def test_noop_invoke_succeeds(self) -> None:
-        invoker = AgentInvoker(method="noop", target="")
+        invoker = AgentInvoker(method="noop")
         await invoker.invoke({"message_id": "test"})  # Should not raise
 
 
@@ -307,22 +308,22 @@ class TestWakeEndpointConfigDefaults:
         cfg = WakeEndpointConfig()
         assert cfg.enabled is True
         assert cfg.invoke_method == "noop"
-        assert cfg.invoke_target == ""
         assert cfg.secret == ""
         assert cfg.session_file == "/root/.swarm/session.json"
         assert cfg.session_timeout_minutes == 30
+        assert cfg.tmux_target == ""
 
     def test_custom_values(self) -> None:
         cfg = WakeEndpointConfig(
             enabled=True,
-            invoke_method="subprocess",
-            invoke_target="echo wake",
+            invoke_method="tmux",
             secret="s3cret",
             session_file="/tmp/sess.json",
             session_timeout_minutes=10,
+            tmux_target="nexus",
         )
         assert cfg.enabled is True
-        assert cfg.invoke_method == "subprocess"
-        assert cfg.invoke_target == "echo wake"
+        assert cfg.invoke_method == "tmux"
         assert cfg.secret == "s3cret"
         assert cfg.session_timeout_minutes == 10
+        assert cfg.tmux_target == "nexus"

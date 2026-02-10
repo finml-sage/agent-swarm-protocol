@@ -262,8 +262,8 @@ inline via `WakeTrigger`.
 ```
 Message arrives -> Server persists to SQLite -> WakeTrigger evaluates
     -> If WAKE: POST /api/wake -> Session dedup check
-    -> AgentInvoker starts Claude (subprocess/webhook/noop)
-    -> Context loaded (swarm info, history via get_recent(), mutes)
+    -> AgentInvoker starts Claude (tmux/noop)
+    -> Context loaded (swarm info, history via list_recent(), mutes)
     -> Subagent decides action -> ResponseHandler executes
 ```
 
