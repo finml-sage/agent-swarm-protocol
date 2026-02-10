@@ -313,7 +313,7 @@ The key advantage of host deployment is the shared SQLite database. All componen
 |-----------|--------|---------|
 | `swarm` CLI | Read/Write | Create swarms, invite agents, send messages |
 | FastAPI server | Read/Write | Handle inbound messages, process joins |
-| Claude hooks | Read | Check for pending messages |
+| Claude hooks | Read | Check for unread inbox messages |
 | Claude Agent SDK | Read/Write | Wake system session management |
 
 Set `DB_PATH` in the environment file to point to the same database that the CLI uses (typically `~/.swarm/swarm.db`).

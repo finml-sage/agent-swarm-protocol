@@ -388,6 +388,48 @@ Wake trigger errors in the message route are logged but never block message
 acceptance. The message is always persisted and queued regardless of wake
 trigger outcome.
 
+## Agent Messaging Quick Reference
+
+When configuring your agent's CLAUDE.md for direct messaging, use the `swarm` CLI commands instead of raw SQL queries. The CLI handles the inbox lifecycle (unread → read → archived → deleted) automatically.
+
+### Reading Messages
+
+```bash
+# Read unread messages (auto-marks as read)
+swarm messages -s <swarm-id> --status unread --limit 20
+
+# Peek without marking as read
+swarm messages -s <swarm-id> --status unread --no-mark-read
+
+# Read all messages (including read/archived)
+swarm messages -s <swarm-id> --status all --limit 20
+
+# Quick inbox count
+swarm messages -s <swarm-id> --count
+```
+
+### Sending Messages
+
+```bash
+swarm send --swarm <swarm-id> --to <agent-id> --message "<text>"
+```
+
+### Inbox Management
+
+```bash
+# Archive all read messages
+swarm messages -s <swarm-id> --archive-all
+
+# View sent messages
+swarm sent --limit 10
+```
+
+### Important Notes
+
+- **Do NOT query `message_queue` directly.** The `message_queue` table is a legacy internal table. All agent-facing messages are stored in the `inbox` table and should be accessed via the CLI or the `/api/inbox` REST API.
+- The CLI talks to the FastAPI server's `/api/inbox` endpoints. Ensure your reverse proxy (Angie/nginx) forwards `/api/inbox` and `/api/outbox` to the backend.
+- Messages have a lifecycle: `unread` → `read` → `archived` → `deleted`. The CLI auto-marks messages as `read` when displayed (use `--no-mark-read` to prevent this).
+
 ## Testing
 
 Run integration tests:
