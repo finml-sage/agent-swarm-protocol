@@ -116,19 +116,19 @@ echo ""
 # ---------------------------------------------------------------------------
 step "Step 1/14: Collect agent identity"
 
-read -rp "Agent ID (e.g. my-agent): " AGENT_ID
+read -rp "Agent ID (e.g. my-agent): " AGENT_ID < /dev/tty
 if [[ -z "$AGENT_ID" ]]; then
     error "Agent ID is required."
 fi
 
-read -rp "Domain name (e.g. agent.example.com): " DOMAIN
+read -rp "Domain name (e.g. agent.example.com): " DOMAIN < /dev/tty
 if [[ -z "$DOMAIN" ]]; then
     error "Domain name is required."
 fi
 
-read -rp "Swarm join URL (optional, press Enter to skip): " JOIN_URL
+read -rp "Swarm join URL (optional, press Enter to skip): " JOIN_URL < /dev/tty
 
-read -rp "Tmux session name for wake system [default: same as Agent ID]: " TMUX_TARGET
+read -rp "Tmux session name for wake system [default: same as Agent ID]: " TMUX_TARGET < /dev/tty
 TMUX_TARGET="${TMUX_TARGET:-$AGENT_ID}"
 
 AGENT_ENDPOINT="https://${DOMAIN}/swarm"
@@ -143,7 +143,7 @@ echo "  Tmux target:    ${TMUX_TARGET}"
 echo "  Install dir:    ${INSTALL_DIR}"
 echo "  DB path:        ${DB_PATH}"
 echo ""
-read -rp "Proceed with these settings? [Y/n] " CONFIRM
+read -rp "Proceed with these settings? [Y/n] " CONFIRM < /dev/tty
 CONFIRM="${CONFIRM:-Y}"
 if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
     echo "Aborted."
@@ -244,7 +244,7 @@ if [[ -d "${INSTALL_DIR}/.git" ]]; then
 else
     if [[ -d "$INSTALL_DIR" ]]; then
         warn "${INSTALL_DIR} exists but is not a git repo."
-        read -rp "Remove and re-clone? [Y/n] " RECLONE
+        read -rp "Remove and re-clone? [Y/n] " RECLONE < /dev/tty
         RECLONE="${RECLONE:-Y}"
         if [[ "$RECLONE" =~ ^[Yy]$ ]]; then
             rm -rf "$INSTALL_DIR"
@@ -280,7 +280,7 @@ step "Step 5/14: Initialize agent identity"
 
 if [[ -f "$AGENT_KEY" ]]; then
     info "Agent key already exists at ${AGENT_KEY}."
-    read -rp "Re-initialize identity? This will overwrite the existing key. [y/N] " REINIT
+    read -rp "Re-initialize identity? This will overwrite the existing key. [y/N] " REINIT < /dev/tty
     REINIT="${REINIT:-N}"
     if [[ "$REINIT" =~ ^[Yy]$ ]]; then
         "${VENV_DIR}/bin/swarm" init \
@@ -306,11 +306,15 @@ if [[ ! -f "$AGENT_KEY" ]]; then
     error "Agent key not found at ${AGENT_KEY}. Step 5 may have failed."
 fi
 
-# Ed25519 private key is 64 bytes: first 32 = private seed, last 32 = public key
-PUBLIC_KEY_B64="$(python3 -c "
+# Ed25519 key file is 32 bytes (raw private seed). Derive the public key
+# using the cryptography library (installed as ASP dependency).
+PUBLIC_KEY_B64="$(${VENV_DIR}/bin/python3 -c "
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 import base64
 raw = open('${AGENT_KEY}', 'rb').read()
-print(base64.b64encode(raw[32:]).decode())
+private_key = Ed25519PrivateKey.from_private_bytes(raw)
+public_bytes = private_key.public_key().public_bytes_raw()
+print(base64.b64encode(public_bytes).decode())
 ")"
 
 if [[ -z "$PUBLIC_KEY_B64" ]]; then
@@ -326,7 +330,7 @@ step "Step 7/14: Create environment file"
 
 if [[ -f "$ENV_FILE" ]]; then
     warn "Environment file already exists at ${ENV_FILE}."
-    read -rp "Overwrite? [y/N] " OVERWRITE_ENV
+    read -rp "Overwrite? [y/N] " OVERWRITE_ENV < /dev/tty
     OVERWRITE_ENV="${OVERWRITE_ENV:-N}"
     if [[ ! "$OVERWRITE_ENV" =~ ^[Yy]$ ]]; then
         info "Keeping existing environment file."
@@ -360,7 +364,7 @@ step "Step 8/14: Create systemd service"
 
 if [[ -f "$SERVICE_FILE" ]]; then
     warn "Service file already exists at ${SERVICE_FILE}."
-    read -rp "Overwrite? [y/N] " OVERWRITE_SVC
+    read -rp "Overwrite? [y/N] " OVERWRITE_SVC < /dev/tty
     OVERWRITE_SVC="${OVERWRITE_SVC:-N}"
     if [[ ! "$OVERWRITE_SVC" =~ ^[Yy]$ ]]; then
         info "Keeping existing service file."
