@@ -108,7 +108,7 @@ def sent_command(
             m["recipient_id"],
             m["status"],
             m["sent_at"][:19],
-            _truncate(m["content"], 60),
+            _truncate(m["content"], 500),
         )
         for m in msgs
     ]
