@@ -6,15 +6,24 @@ github:
   # Poll interval tracked internally (cron handles actual scheduling)
   poll_interval_minutes: 5
 
-# Repos to monitor (add/remove as needed)
+# Repos to monitor (private repos only) with per-repo coordinator routing.
+# Each event wakes ONE coordinator, not all agents.
 repos:
-  - finml-sage/agent-swarm-protocol
-  - finml-sage/agent-memory
-  - finml-sage/ideoon-automation
-  - vantasnerdan/agent-model-pipeline
-  - mlops-kelvin/kelvin-agent
-  - nexus-marbell/nexus-state
-  - nexus-marbell/claude-multi-chat-agent
+  finml-sage/agent-memory:
+    coordinator: finml-sage
+  finml-sage/ideoon-automation:
+    coordinator: finml-sage
+  vantasnerdan/agent-model-pipeline:
+    coordinator: kelvin
+  mlops-kelvin/kelvin-agent:
+    coordinator: kelvin
+  nexus-marbell/nexus-state:
+    coordinator: nexus-marbell
+  nexus-marbell/claude-multi-chat-agent:
+    coordinator: nexus-marbell
+
+# Fallback coordinator when repo entry is a plain string (backward compat)
+default_coordinator: nexus-marbell
 
 # User tiers - determines wake message urgency and autonomy level
 users:
@@ -32,8 +41,3 @@ users:
 # Swarm config
 swarm:
   swarm_id: "716a4150-ab9d-4b54-a2a8-f2b7c607c21e"
-  # Who to wake when activity detected (agent IDs)
-  notify:
-    - finml-sage
-    - nexus-marbell
-    - kelvin

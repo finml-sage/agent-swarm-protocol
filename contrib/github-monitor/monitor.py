@@ -54,7 +54,12 @@ def setup_logging() -> None:
 
 
 def load_config(config_path: Path) -> dict:
-    """Load and validate the YAML configuration file."""
+    """Load and validate the YAML configuration file.
+
+    Supports two repos formats:
+    - New (dict): per-repo coordinator mapping
+    - Legacy (list of strings): uses default_coordinator fallback
+    """
     if not config_path.exists():
         raise FileNotFoundError(f"Config file not found: {config_path}")
     with open(config_path) as f:
@@ -66,8 +71,16 @@ def load_config(config_path: Path) -> dict:
             raise ValueError(f"Missing required config section: {key}")
     if "swarm_id" not in config["swarm"]:
         raise ValueError("Missing swarm.swarm_id in config")
-    if "notify" not in config["swarm"]:
-        raise ValueError("Missing swarm.notify in config")
+    # Validate repos format
+    repos = config["repos"]
+    if isinstance(repos, dict):
+        for repo_name, repo_cfg in repos.items():
+            if isinstance(repo_cfg, dict) and "coordinator" not in repo_cfg:
+                raise ValueError(
+                    f"Repo '{repo_name}' is missing 'coordinator' field"
+                )
+    elif not isinstance(repos, list):
+        raise ValueError("'repos' must be a list or dict")
     return config
 
 
@@ -129,6 +142,48 @@ def get_user_tier(username: str, users_config: dict) -> str | None:
         if tier_users and username in tier_users:
             return tier
     return None
+
+
+def get_repo_list(config: dict) -> list[str]:
+    """Extract the list of repo name strings from config.
+
+    Handles both new (dict) and legacy (list) formats.
+    """
+    repos = config["repos"]
+    if isinstance(repos, dict):
+        return list(repos.keys())
+    return list(repos)
+
+
+def get_coordinator(repo: str, config: dict) -> str:
+    """Look up the coordinator agent for a given repo.
+
+    For dict-style repos config, returns the coordinator field.
+    For legacy list-style repos or missing entries, falls back to
+    default_coordinator.
+
+    Raises ValueError if no coordinator can be determined.
+    """
+    repos = config["repos"]
+    default = config.get("default_coordinator")
+
+    if isinstance(repos, dict):
+        repo_cfg = repos.get(repo)
+        if isinstance(repo_cfg, dict):
+            return repo_cfg["coordinator"]
+        # Plain string value or None -- fall back to default
+        if default:
+            return default
+        raise ValueError(
+            f"No coordinator for repo '{repo}' and no default_coordinator set"
+        )
+
+    # Legacy list format
+    if default:
+        return default
+    raise ValueError(
+        f"Legacy repo list format requires 'default_coordinator' in config"
+    )
 
 
 def gh_api(endpoint: str, params: dict | None = None) -> dict | list:
@@ -237,7 +292,12 @@ def format_wake_message(
     issue_title: str,
     content: str,
 ) -> str:
-    """Format the wake message based on user tier."""
+    """Format the wake message based on user tier.
+
+    Includes task chain management instructions for principal and team
+    tiers so the coordinator knows to decompose, delegate, and track
+    until all agents confirm completion.
+    """
     if tier == "principal":
         header = (
             f'PRINCIPAL DIRECTIVE from {username} on '
@@ -254,9 +314,21 @@ def format_wake_message(
             "-> verify -> report\n"
             "- If blocked, find an alternative path before escalating\n"
             "- Only escalate if genuinely impossible (not merely uncertain)\n"
-            "- Coordinate with team members as needed but do not wait for "
-            "consensus to act\n"
-            "- Report completion via swarm message when done"
+            "- Report completion via swarm message when done\n"
+            "\n"
+            "TASK CHAIN MANAGEMENT:\n"
+            "- You are the coordinator for this directive\n"
+            "- Decompose the task and delegate subtasks to other agents "
+            "via swarm\n"
+            "- Do NOT require Dan or any user to participate -- handle "
+            "entirely within the team\n"
+            "- Track progress on the GitHub issue with status comments\n"
+            "- The task chain stays OPEN until ALL involved agents confirm "
+            "completion via swarm message\n"
+            "- Only close when every agent who worked on a subtask confirms: "
+            '"my piece is done" or "blocked at [reason]"\n'
+            "- If you need another agent's help, send them a specific "
+            "subtask via swarm -- do not broadcast"
         )
     elif tier == "team":
         header = (
@@ -268,7 +340,16 @@ def format_wake_message(
             "AUTONOMY LEVEL: NORMAL\n"
             "- Route through standard workflow\n"
             "- Delegate to appropriate specialists\n"
-            "- Verify before reporting complete"
+            "- Verify before reporting complete\n"
+            "\n"
+            "TASK CHAIN MANAGEMENT:\n"
+            "- You are the coordinator for this activity\n"
+            "- If this requires work from other agents, delegate specific "
+            "subtasks via swarm\n"
+            "- Handle within the team -- do not escalate to Dan unless a "
+            "guardrail fires\n"
+            "- Keep the task open until all involved agents confirm "
+            "completion via swarm"
         )
     else:
         header = (
@@ -373,19 +454,23 @@ def determine_content(
 
 def process_repo(
     repo: str,
+    coordinator: str,
     users: list[tuple[str, str]],
     state: dict,
     swarm_config: dict,
     dry_run: bool,
 ) -> int:
-    """Process a single repo for all monitored users.
+    """Process a single repo, sending wake messages to its coordinator.
+
+    Each repo has a single designated coordinator. Only that agent
+    receives the wake message -- no broadcast. The coordinator is
+    responsible for decomposing and delegating to other agents via swarm.
 
     Returns the number of new events found.
     """
     seen = state.setdefault("seen_events", {})
     last_check = state.get("last_check")
     swarm_id = swarm_config["swarm_id"]
-    notify_targets = swarm_config["notify"]
     new_events = 0
 
     for user, tier in users:
@@ -405,19 +490,22 @@ def process_repo(
                 tier, user, repo, issue_number, issue_title, content,
             )
 
-            for target in notify_targets:
-                if target == user:
-                    continue
-                send_wake_message(swarm_id, target, message, dry_run=dry_run)
+            # Send to the single designated coordinator (skip if the
+            # coordinator is the same user who triggered the event)
+            if coordinator != user:
+                send_wake_message(
+                    swarm_id, coordinator, message, dry_run=dry_run,
+                )
 
             seen[event_key] = updated_at
             new_events += 1
             logger.info(
-                "New activity: %s#%d by %s (%s tier)",
+                "New activity: %s#%d by %s (%s tier) -> coordinator %s",
                 repo,
                 issue_number,
                 user,
                 tier,
+                coordinator,
             )
 
     return new_events
@@ -464,7 +552,7 @@ def _run_inner(
     """Core monitor logic, called under lock."""
     config = load_config(config_path)
     state = load_state()
-    repos = config["repos"]
+    repo_names = get_repo_list(config)
     users = get_monitored_users(config["users"])
     swarm_config = config["swarm"]
 
@@ -476,10 +564,12 @@ def _run_inner(
     effective_dry_run = dry_run or seed
 
     total_events = 0
-    for repo in repos:
+    for repo in repo_names:
         try:
+            coordinator = get_coordinator(repo, config)
             events = process_repo(
-                repo, users, state, swarm_config, effective_dry_run,
+                repo, coordinator, users, state, swarm_config,
+                effective_dry_run,
             )
             total_events += events
         except Exception:
@@ -495,7 +585,7 @@ def _run_inner(
 
     logger.info(
         "Monitor complete: %d repos checked, %d new events",
-        len(repos),
+        len(repo_names),
         total_events,
     )
 

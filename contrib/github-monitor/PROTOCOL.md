@@ -462,3 +462,99 @@ Agents do not need additional configuration beyond the standard wake
 endpoint setup (`WAKE_EP_ENABLED=true`, `WAKE_EP_INVOKE_METHOD=tmux`).
 The autonomy instructions are carried in the message payload itself --
 the agent reads them and adjusts its behavior accordingly.
+
+## 10. Task Chain Lifecycle
+
+### 10.1 Overview
+
+Each GitHub event triggers a **task chain** -- a coordinated sequence of
+work that begins when the coordinator receives the wake message and ends
+only when all involved agents confirm completion. No principal (Dan,
+Martin) involvement is required for task execution; principals are only
+notified if a guardrail fires (Section 3.2).
+
+### 10.2 Single Coordinator Routing
+
+Each monitored repo has a designated **coordinator** agent defined in
+`config.yaml`. When the monitor detects activity on a repo, it sends the
+wake message to that repo's coordinator only -- not to all agents. This
+eliminates redundant token consumption from broadcasting the same event
+to every agent.
+
+| Repo | Coordinator |
+|------|-------------|
+| `finml-sage/agent-memory` | `finml-sage` |
+| `finml-sage/ideoon-automation` | `finml-sage` |
+| `vantasnerdan/agent-model-pipeline` | `kelvin` |
+| `mlops-kelvin/kelvin-agent` | `kelvin` |
+| `nexus-marbell/nexus-state` | `nexus-marbell` |
+| `nexus-marbell/claude-multi-chat-agent` | `nexus-marbell` |
+
+If a repo is not in the mapping, the `default_coordinator` (currently
+`nexus-marbell`) receives the wake.
+
+### 10.3 Coordinator Responsibilities
+
+The coordinator who receives the wake message becomes the **owner** of
+the task chain. Responsibilities:
+
+1. **Parse the directive** -- Understand what the principal or team
+   member is asking for.
+2. **Decompose into subtasks** -- Break the work into discrete pieces.
+   Identify which agents own each piece.
+3. **Delegate via swarm** -- Send specific subtask messages to the
+   appropriate agents. Each message must include the issue URL for
+   traceability.
+4. **Track progress** -- Post status comments on the GitHub issue as
+   subtasks are completed or blocked.
+5. **Collect confirmations** -- Wait for every delegated agent to
+   confirm completion via swarm message.
+6. **Close the chain** -- Only when ALL agents confirm done (or report
+   a blocking reason).
+
+### 10.4 Subtask Confirmation Protocol
+
+Each agent who receives a delegated subtask MUST send one of these
+swarm messages back to the coordinator when done:
+
+- **Success**: `"my piece is done"` -- Include a brief summary of what
+  was completed and links to any artifacts (PRs, commits).
+- **Blocked**: `"blocked at [reason]"` -- Include what is blocking,
+  what was attempted, and whether a guardrail fired.
+
+The coordinator aggregates these confirmations. The task chain remains
+**OPEN** until every involved agent has responded.
+
+### 10.5 No Principal Involvement Required
+
+Task chains are executed entirely within the team. The coordinator does
+NOT escalate to Dan or Martin for:
+
+- Choosing between valid approaches (use conservative default)
+- Getting approval for intermediate steps
+- Confirming that work should proceed
+
+The ONLY reasons to escalate to a principal are the guardrails defined
+in Section 3.2 (impossible task, cost threshold, irreversible production
+change, missing credentials, cross-swarm impact, contradicting directive).
+
+### 10.6 Task Chain States
+
+| State | Meaning |
+|-------|---------|
+| `OPEN` | Coordinator received wake, work in progress |
+| `DELEGATED` | Subtasks sent to other agents, awaiting confirmations |
+| `BLOCKED` | One or more subtasks hit a guardrail, awaiting principal |
+| `DONE` | All agents confirmed, coordinator posted completion summary |
+
+### 10.7 Failure Handling
+
+If a delegated agent does not respond within a reasonable time (defined
+by the coordinator based on task scope), the coordinator:
+
+1. Sends a follow-up swarm message asking for status.
+2. If still no response after the follow-up, posts a status comment on
+   the issue noting the unresponsive agent.
+3. Attempts to reassign the subtask to another capable agent.
+4. If no alternative exists, marks the subtask as blocked and escalates
+   per Section 3.2.
