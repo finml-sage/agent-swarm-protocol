@@ -1,0 +1,39 @@
+# GitHub Monitor Configuration
+# Polls GitHub repos for issue activity from specific users
+# and sends swarm wake messages when activity is detected.
+
+github:
+  # Poll interval tracked internally (cron handles actual scheduling)
+  poll_interval_minutes: 5
+
+# Repos to monitor (add/remove as needed)
+repos:
+  - finml-sage/agent-swarm-protocol
+  - finml-sage/agent-memory
+  - finml-sage/ideoon-automation
+  - vantasnerdan/agent-model-pipeline
+  - mlops-kelvin/kelvin-agent
+  - nexus-marbell/nexus-state
+  - nexus-marbell/claude-multi-chat-agent
+
+# User tiers - determines wake message urgency and autonomy level
+users:
+  principal:  # Full autonomy - execute without waiting for input
+    - vantasnerdan    # Dan
+    - mdurchschlag    # Martin
+  team:  # Normal workflow - route and delegate as usual
+    - finml-sage
+    - nexus-marbell
+    - mlops-kelvin
+  external:  # Triage - assess and route to appropriate team member
+    []
+    # Future: serhii, ideoon team members
+
+# Swarm config
+swarm:
+  swarm_id: "716a4150-ab9d-4b54-a2a8-f2b7c607c21e"
+  # Who to wake when activity detected (agent IDs)
+  notify:
+    - finml-sage
+    - nexus-marbell
+    - kelvin
