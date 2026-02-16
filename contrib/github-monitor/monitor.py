@@ -449,16 +449,18 @@ def release_lock(fd: TextIOWrapper) -> None:
         pass
 
 
-def run(config_path: Path, dry_run: bool = False) -> None:
+def run(config_path: Path, dry_run: bool = False, seed: bool = False) -> None:
     """Main monitor loop: check all repos and send wake messages."""
     lock_fd = acquire_lock()
     try:
-        _run_inner(config_path, dry_run)
+        _run_inner(config_path, dry_run=dry_run, seed=seed)
     finally:
         release_lock(lock_fd)
 
 
-def _run_inner(config_path: Path, dry_run: bool = False) -> None:
+def _run_inner(
+    config_path: Path, dry_run: bool = False, seed: bool = False,
+) -> None:
     """Core monitor logic, called under lock."""
     config = load_config(config_path)
     state = load_state()
@@ -470,16 +472,25 @@ def _run_inner(config_path: Path, dry_run: bool = False) -> None:
         logger.warning("No users configured to monitor")
         return
 
+    # In seed mode, scan all repos but skip sending — just populate state
+    effective_dry_run = dry_run or seed
+
     total_events = 0
     for repo in repos:
         try:
-            events = process_repo(repo, users, state, swarm_config, dry_run)
+            events = process_repo(
+                repo, users, state, swarm_config, effective_dry_run,
+            )
             total_events += events
         except Exception:
             logger.exception("Error processing repo %s", repo)
             continue
 
-    if not dry_run:
+    if seed:
+        # Seed mode: save state without having sent anything
+        save_state(state)
+        logger.info("Seed complete: %d events recorded, no messages sent", total_events)
+    elif not dry_run:
         save_state(state)
 
     logger.info(
@@ -507,6 +518,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Show what would be sent without actually sending",
     )
     parser.add_argument(
+        "--seed",
+        action="store_true",
+        help="Scan all repos and save state without sending any messages. "
+        "Run this once before enabling cron to avoid flooding with historical events.",
+    )
+    parser.add_argument(
         "--reset",
         action="store_true",
         help="Reset state file and re-check everything",
@@ -525,7 +542,7 @@ def main() -> None:
         return
 
     try:
-        run(args.config, dry_run=args.dry_run)
+        run(args.config, dry_run=args.dry_run, seed=args.seed)
     except FileNotFoundError as exc:
         logger.error("%s", exc)
         sys.exit(1)
