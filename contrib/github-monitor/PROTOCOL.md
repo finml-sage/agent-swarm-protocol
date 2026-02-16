@@ -208,7 +208,14 @@ structured `content` field.
 
 ### 5.2 Content Payload Schema
 
-The `content` field is a JSON-encoded string with this structure:
+> **Note**: The current monitor implementation (`monitor.py`) sends
+> plain-text wake messages via `swarm send --message`. The structured
+> JSON schema below is the target format for a future iteration that
+> uses the SDK directly. The plain-text format carries the same
+> information (tier, autonomy level, guardrails, issue content) in
+> human-readable form.
+
+The `content` field is a JSON-encoded string with this target structure:
 
 ```json
 {
@@ -387,10 +394,15 @@ the swarm orchestrator for routing.
 The user tier is determined by matching the GitHub username against the
 configured tier list. This is trusted because:
 
-- The GitHub webhook payload includes the authenticated username.
+- The monitor uses `gh api` (authenticated via `gh auth`) to poll the
+  GitHub API. Results are scoped to the authenticated user's access.
 - GitHub's authentication is the trust boundary, not ours.
-- The monitor validates webhook signatures (HMAC-SHA256) to prevent
-  spoofing.
+- The monitor is poll-based, not webhook-based. No inbound HTTP
+  endpoint is exposed, so there is no spoofing surface to defend.
+
+> **Future enhancement**: If the monitor is extended to accept webhooks
+> (inbound HTTP), HMAC-SHA256 signature verification MUST be added
+> before processing any webhook payload.
 
 ### 8.2 Autonomy Injection Prevention
 

@@ -14,11 +14,13 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import logging
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from io import TextIOWrapper
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -28,8 +30,10 @@ except ImportError:
     sys.exit("PyYAML is required: pip install pyyaml")
 
 STATE_FILE = Path.home() / ".github-monitor-state.json"
+LOCK_FILE = Path.home() / ".github-monitor.lock"
 LOG_FILE = Path.home() / ".github-monitor.log"
 DEFAULT_CONFIG = Path(__file__).parent / "config.yaml"
+STATE_TTL_DAYS = 7
 
 logger = logging.getLogger("github-monitor")
 
@@ -75,8 +79,35 @@ def load_state() -> dict:
     return {"last_check": None, "seen_events": {}}
 
 
+def prune_old_events(state: dict) -> int:
+    """Remove seen_events older than STATE_TTL_DAYS.
+
+    Event keys are formatted as 'repo#number@updated_at' where updated_at
+    is an ISO 8601 timestamp. Returns the number of pruned entries.
+    """
+    seen = state.get("seen_events", {})
+    cutoff = datetime.now(timezone.utc) - timedelta(days=STATE_TTL_DAYS)
+    stale_keys = []
+    for key, updated_at in seen.items():
+        try:
+            ts = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
+            if ts < cutoff:
+                stale_keys.append(key)
+        except (ValueError, TypeError, AttributeError):
+            stale_keys.append(key)
+    for key in stale_keys:
+        del seen[key]
+    return len(stale_keys)
+
+
 def save_state(state: dict) -> None:
-    """Persist monitor state to JSON file."""
+    """Persist monitor state to JSON file.
+
+    Prunes events older than STATE_TTL_DAYS before writing.
+    """
+    pruned = prune_old_events(state)
+    if pruned > 0:
+        logger.info("Pruned %d stale events from state", pruned)
     state["last_check"] = datetime.now(timezone.utc).isoformat()
     with open(STATE_FILE, "w") as f:
         json.dump(state, f, indent=2, default=str)
@@ -165,24 +196,29 @@ def search_issues(
     return []
 
 
-def fetch_issue_details(repo: str, issue_number: int) -> dict | None:
-    """Fetch full issue details including body."""
-    try:
-        return gh_api(f"/repos/{repo}/issues/{issue_number}")
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
-        logger.error("Failed to fetch %s#%d: %s", repo, issue_number, exc)
-        return None
+def fetch_latest_comment(
+    repo: str, issue_number: int, user: str | None = None,
+) -> dict | None:
+    """Fetch the most recent comment on an issue, optionally by a specific user.
 
-
-def fetch_latest_comment(repo: str, issue_number: int) -> dict | None:
-    """Fetch the most recent comment on an issue."""
+    The issue-level comments endpoint does NOT support sort/direction params.
+    Comments are always returned in chronological order (oldest first).
+    We fetch up to 100 and take the last one matching the target user.
+    """
     try:
         comments = gh_api(
             f"/repos/{repo}/issues/{issue_number}/comments",
-            params={"per_page": "1", "sort": "created", "direction": "desc"},
+            params={"per_page": "100"},
         )
-        if comments and isinstance(comments, list):
-            return comments[0]
+        if not comments or not isinstance(comments, list):
+            return None
+        if user:
+            user_comments = [
+                c for c in comments
+                if c.get("user", {}).get("login") == user
+            ]
+            return user_comments[-1] if user_comments else None
+        return comments[-1]
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
         logger.error(
             "Failed to fetch comments for %s#%d: %s",
@@ -314,22 +350,23 @@ def determine_content(
 ) -> str:
     """Determine the relevant content to include in the wake message.
 
-    If the issue was recently commented on, fetch the latest comment.
-    Otherwise use the issue body.
+    If the issue was recently commented on, fetch the latest comment by
+    the target user. Otherwise use the issue body already present in the
+    search result to avoid a redundant API call.
     """
     issue_number = issue["number"]
     comments_count = issue.get("comments", 0)
 
     if comments_count > 0:
-        comment = fetch_latest_comment(repo, issue_number)
-        if comment and comment.get("user", {}).get("login") == user:
+        comment = fetch_latest_comment(repo, issue_number, user=user)
+        if comment:
             body = comment.get("body", "")
             if body:
                 return f"[Comment by {user}]\n{body}"
 
-    details = fetch_issue_details(repo, issue_number)
-    if details and details.get("body"):
-        return details["body"]
+    issue_body = issue.get("body")
+    if issue_body:
+        return issue_body
 
     return "(No content available)"
 
@@ -386,8 +423,43 @@ def process_repo(
     return new_events
 
 
+def acquire_lock() -> TextIOWrapper:
+    """Acquire an exclusive lockfile to prevent overlapping cron runs.
+
+    Returns the file object on success.
+    Raises SystemExit if the lock is already held by another process.
+    """
+    fd = open(LOCK_FILE, "w")  # noqa: SIM115
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        logger.warning("Another monitor instance is already running, exiting")
+        fd.close()
+        sys.exit(0)
+    return fd
+
+
+def release_lock(fd: TextIOWrapper) -> None:
+    """Release the lockfile."""
+    try:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        fd.close()
+        LOCK_FILE.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 def run(config_path: Path, dry_run: bool = False) -> None:
     """Main monitor loop: check all repos and send wake messages."""
+    lock_fd = acquire_lock()
+    try:
+        _run_inner(config_path, dry_run)
+    finally:
+        release_lock(lock_fd)
+
+
+def _run_inner(config_path: Path, dry_run: bool = False) -> None:
+    """Core monitor logic, called under lock."""
     config = load_config(config_path)
     state = load_state()
     repos = config["repos"]
