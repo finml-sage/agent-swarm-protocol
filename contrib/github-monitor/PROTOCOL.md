@@ -365,6 +365,11 @@ When the principal responds to a guardrail report:
 
 ## 7. Recipient Selection
 
+> **Note**: As of Section 10.2, recipient selection is handled by the
+> per-repo coordinator mapping in `config.yaml`. The signal-based rules
+> below apply when the coordinator further delegates within its team
+> (e.g., choosing which specialist to forward a subtask to).
+
 ### 7.1 Which Agent Gets the Wake
 
 The GitHub monitor determines the recipient based on:
@@ -429,32 +434,30 @@ messages:
 
 ### 9.1 Monitor Configuration
 
-```json
-{
-  "monitor": {
-    "poll_interval_seconds": 60,
-    "repos": [
-      "finml-sage/agent-swarm-protocol",
-      "finml-sage/agent-memory",
-      "nexus-marbell/nexus-state"
-    ],
-    "events": ["issues", "issue_comment", "pull_request", "pull_request_review"]
-  },
-  "user_tiers": {
-    "principal": ["vantasnerdan", "mdurchschlag"],
-    "team": ["finml-sage", "nexus-marbell", "mlops-kelvin"],
-    "external": "*"
-  },
-  "rate_limits": {
-    "per_issue_cooldown_seconds": 300,
-    "max_wakes_per_hour": 10
-  },
-  "swarm": {
-    "swarm_id": "716a4150-ab9d-4b54-a2a8-f2b7c607c21e",
-    "default_recipient": "nexus-marbell"
-  }
-}
+```yaml
+repos:
+  finml-sage/agent-memory:
+    coordinator: finml-sage
+  vantasnerdan/agent-model-pipeline:
+    coordinator: kelvin
+default_coordinator: nexus-marbell
+
+users:
+  principal:
+    - vantasnerdan
+    - mdurchschlag
+  team:
+    - finml-sage
+    - nexus-marbell
+    - mlops-kelvin
+
+swarm:
+  swarm_id: "716a4150-ab9d-4b54-a2a8-f2b7c607c21e"
 ```
+
+Each repo maps to a `coordinator` agent who receives wake messages for
+that repo's activity. The `default_coordinator` is used as a fallback
+for repos not explicitly listed, or when using the legacy list format.
 
 ### 9.2 Agent-Side Configuration
 
