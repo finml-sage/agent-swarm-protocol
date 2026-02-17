@@ -73,14 +73,38 @@ def load_config(config_path: Path) -> dict:
         raise ValueError("Missing swarm.swarm_id in config")
     # Validate repos format
     repos = config["repos"]
+    # Collect all known agent IDs from the users config for coordinator validation
+    known_agents: set[str] = set()
+    users_cfg = config.get("users", {})
+    for tier in ("principal", "team", "external"):
+        tier_list = users_cfg.get(tier, [])
+        if isinstance(tier_list, list):
+            known_agents.update(tier_list)
     if isinstance(repos, dict):
         for repo_name, repo_cfg in repos.items():
             if isinstance(repo_cfg, dict) and "coordinator" not in repo_cfg:
                 raise ValueError(
                     f"Repo '{repo_name}' is missing 'coordinator' field"
                 )
+            if isinstance(repo_cfg, dict) and known_agents:
+                coord = repo_cfg.get("coordinator", "")
+                if coord and coord not in known_agents:
+                    logging.warning(
+                        "Repo '%s' coordinator '%s' is not a known agent ID "
+                        "in the users config",
+                        repo_name,
+                        coord,
+                    )
     elif not isinstance(repos, list):
         raise ValueError("'repos' must be a list or dict")
+    # Validate default_coordinator if present
+    default_coord = config.get("default_coordinator", "")
+    if default_coord and known_agents and default_coord not in known_agents:
+        logging.warning(
+            "default_coordinator '%s' is not a known agent ID "
+            "in the users config",
+            default_coord,
+        )
     return config
 
 
@@ -490,8 +514,7 @@ def process_repo(
                 tier, user, repo, issue_number, issue_title, content,
             )
 
-            # Send to the single designated coordinator (skip if the
-            # coordinator is the same user who triggered the event)
+            # Don't wake the coordinator about their own activity
             if coordinator != user:
                 send_wake_message(
                     swarm_id, coordinator, message, dry_run=dry_run,
