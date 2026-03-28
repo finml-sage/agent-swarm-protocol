@@ -8,7 +8,7 @@ from rich.console import Console
 from rich.prompt import Confirm
 
 from src.cli.output import format_error, format_success, format_warning, json_output
-from src.cli.utils import ConfigManager, validate_swarm_id
+from src.cli.utils import ConfigManager, resolve_swarm_id, SwarmIdError
 from src.cli.utils.config import ConfigError
 from src.client import SwarmClient
 from src.state import DatabaseManager, MembershipRepository
@@ -74,13 +74,16 @@ async def _leave_swarm(swarm_id: UUID) -> str:
 
 
 def leave_command(
-    swarm_id: str = typer.Option(..., "--swarm", "-s", help="Swarm ID to leave"),
-    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
-    json_flag: bool = typer.Option(False, "--json", help="Output as JSON"),
+    swarm_id: str | None,
+    yes: bool,
+    json_flag: bool,
 ) -> None:
     """Leave a swarm. Notifies other members before departure."""
     try:
-        swarm_uuid = validate_swarm_id(swarm_id)
+        swarm_uuid = resolve_swarm_id(swarm_id)
+    except SwarmIdError as e:
+        format_error(console, str(e))
+        raise typer.Exit(code=2)
     except ValueError as e:
         format_error(console, str(e))
         raise typer.Exit(code=2)

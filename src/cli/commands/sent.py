@@ -6,7 +6,7 @@ import typer
 from rich.console import Console
 
 from src.cli.output import format_error, format_table, json_output
-from src.cli.utils import ConfigManager, validate_swarm_id
+from src.cli.utils import ConfigManager, resolve_swarm_id, SwarmIdError
 from src.cli.utils.config import ConfigError
 from src.state import DatabaseManager, OutboxRepository
 
@@ -58,11 +58,14 @@ def _truncate(text: str, length: int) -> str:
 
 
 def sent_command(
-    swarm_id: str, limit: int, count: bool, json_flag: bool,
+    swarm_id: str | None, limit: int, count: bool, json_flag: bool,
 ) -> None:
     """List sent messages from the local outbox."""
     try:
-        swarm_uuid = validate_swarm_id(swarm_id)
+        swarm_uuid = resolve_swarm_id(swarm_id)
+    except SwarmIdError as e:
+        format_error(console, str(e))
+        raise typer.Exit(code=2)
     except ValueError as e:
         format_error(console, str(e))
         raise typer.Exit(code=2)

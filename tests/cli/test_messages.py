@@ -89,7 +89,7 @@ class TestMessagesValidation:
             result = runner.invoke(app, ["messages"])
 
         assert result.exit_code == 2
-        assert "Swarm ID is required" in result.stdout
+        assert "No swarm ID" in result.stdout
 
     def test_messages_invalid_swarm_id(self, monkeypatch):
         """Messages with invalid UUID fails with exit 2."""
@@ -514,7 +514,7 @@ class TestMessagesArchiveAll:
             result = runner.invoke(app, ["messages", "--archive-all"])
 
         assert result.exit_code == 2
-        assert "Swarm ID is required" in result.stdout
+        assert "No swarm ID" in result.stdout
 
     @patch("src.cli.commands.messages._batch_inbox_action", new_callable=AsyncMock)
     @patch("src.cli.commands.messages._fetch_inbox", new_callable=AsyncMock)

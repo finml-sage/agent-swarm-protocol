@@ -8,7 +8,7 @@ import typer
 from rich.console import Console
 
 from src.cli.output import format_error, format_success, json_output
-from src.cli.utils import ConfigManager, validate_swarm_id
+from src.cli.utils import ConfigManager, resolve_swarm_id, SwarmIdError
 from src.cli.utils.config import ConfigError
 from src.client import SwarmClient
 from src.state import DatabaseManager, MembershipRepository
@@ -68,18 +68,17 @@ async def _generate_invite(
 
 
 def invite_command(
-    swarm_id: str = typer.Option(..., "--swarm", "-s", help="Swarm ID to invite to"),
-    expires_hours: int = typer.Option(
-        None, "--expires", "-e", help="Hours until invite expires (default: never)"
-    ),
-    max_uses: int = typer.Option(
-        None, "--max-uses", "-m", help="Maximum number of times invite can be used"
-    ),
-    json_flag: bool = typer.Option(False, "--json", help="Output as JSON"),
+    swarm_id: str | None,
+    expires_hours: int | None,
+    max_uses: int | None,
+    json_flag: bool,
 ) -> None:
     """Generate an invite token for others to join the swarm."""
     try:
-        swarm_uuid = validate_swarm_id(swarm_id)
+        swarm_uuid = resolve_swarm_id(swarm_id)
+    except SwarmIdError as e:
+        format_error(console, str(e))
+        raise typer.Exit(code=2)
     except ValueError as e:
         format_error(console, str(e))
         raise typer.Exit(code=2)

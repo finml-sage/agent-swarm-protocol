@@ -8,7 +8,7 @@ from rich.console import Console
 from rich.prompt import Confirm
 
 from src.cli.output import format_error, format_success, format_warning, json_output
-from src.cli.utils import ConfigManager, validate_agent_id, validate_swarm_id
+from src.cli.utils import ConfigManager, resolve_swarm_id, SwarmIdError, validate_agent_id
 from src.cli.utils.config import ConfigError
 from src.client import NotMasterError, SwarmClient
 from src.state import DatabaseManager, MembershipRepository
@@ -72,16 +72,19 @@ async def _kick_member(swarm_id: UUID, target_agent: str, reason: str | None) ->
 
 
 def kick_command(
-    swarm_id: str = typer.Option(..., "--swarm", "-s", help="Swarm ID"),
-    agent_id: str = typer.Option(..., "--agent", "-a", help="Agent ID to kick"),
-    reason: str = typer.Option(None, "--reason", "-r", help="Reason for kicking"),
-    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
-    json_flag: bool = typer.Option(False, "--json", help="Output as JSON"),
+    swarm_id: str | None,
+    agent_id: str,
+    reason: str | None,
+    yes: bool,
+    json_flag: bool,
 ) -> None:
     """Remove a member from a swarm. Only the swarm master can kick members."""
     try:
-        swarm_uuid = validate_swarm_id(swarm_id)
+        swarm_uuid = resolve_swarm_id(swarm_id)
         target_agent = validate_agent_id(agent_id)
+    except SwarmIdError as e:
+        format_error(console, str(e))
+        raise typer.Exit(code=2)
     except ValueError as e:
         format_error(console, str(e))
         raise typer.Exit(code=2)

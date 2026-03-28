@@ -3,6 +3,7 @@
 import typer
 from rich.console import Console
 
+from src.cli.commands.config import config_command
 from src.cli.commands.create import create_command
 from src.cli.commands.export_state import export_command
 from src.cli.commands.import_state import import_command
@@ -53,7 +54,7 @@ def create(
 
 @app.command("invite")
 def invite(
-    swarm_id: str = typer.Option(..., "-s", "--swarm", help="Swarm ID"),
+    swarm_id: str = typer.Option(None, "-s", "--swarm", help="Swarm ID"),
     expires: int = typer.Option(None, "-e", "--expires", help="Hours until expiry"),
     max_uses: int = typer.Option(None, "-m", "--max-uses"),
     json_flag: bool = typer.Option(False, "--json"),
@@ -73,7 +74,7 @@ def join(
 
 @app.command("leave")
 def leave(
-    swarm_id: str = typer.Option(..., "-s", "--swarm", help="Swarm ID"),
+    swarm_id: str = typer.Option(None, "-s", "--swarm", help="Swarm ID"),
     yes: bool = typer.Option(False, "-y", "--yes", help="Skip confirmation"),
     json_flag: bool = typer.Option(False, "--json"),
 ) -> None:
@@ -83,7 +84,7 @@ def leave(
 
 @app.command("kick")
 def kick(
-    swarm_id: str = typer.Option(..., "-s", "--swarm", help="Swarm ID"),
+    swarm_id: str = typer.Option(None, "-s", "--swarm", help="Swarm ID"),
     agent_id: str = typer.Option(..., "-a", "--agent", help="Agent to kick"),
     reason: str = typer.Option(None, "-r", "--reason"),
     yes: bool = typer.Option(False, "-y", "--yes"),
@@ -131,8 +132,10 @@ def purge(
 
 @app.command("send")
 def send(
-    swarm_id: str = typer.Option(..., "-s", "--swarm", help="Swarm ID"),
-    message: str = typer.Option(..., "-m", "--message", help="Content"),
+    swarm_id: str = typer.Option(None, "-s", "--swarm", help="Swarm ID"),
+    message: str = typer.Option(
+        None, "-m", "--message", "--body", help="Content (or pipe via stdin)",
+    ),
     to: str = typer.Option(None, "-t", "--to", help="Recipient (default: all)"),
     json_flag: bool = typer.Option(False, "--json"),
 ) -> None:
@@ -142,7 +145,7 @@ def send(
 
 @app.command("sent")
 def sent(
-    swarm_id: str = typer.Option(..., "-s", "--swarm", help="Swarm ID"),
+    swarm_id: str = typer.Option(None, "-s", "--swarm", help="Swarm ID"),
     limit: int = typer.Option(20, "-l", "--limit", help="Max messages to show"),
     count: bool = typer.Option(False, "--count", help="Show count only"),
     json_flag: bool = typer.Option(False, "--json", help="Output as JSON"),
@@ -204,6 +207,14 @@ def status(
 ) -> None:
     """Show agent configuration and status."""
     status_command(verbose, json_flag)
+
+
+@app.command("config")
+def config(
+    json_flag: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Show resolved configuration including swarm ID fallback chain."""
+    config_command(json_flag)
 
 
 @app.command("export")

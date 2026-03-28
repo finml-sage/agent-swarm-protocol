@@ -14,7 +14,7 @@ import typer
 from rich.console import Console
 
 from src.cli.output import format_error, format_success, format_table, json_output
-from src.cli.utils import ConfigManager, validate_swarm_id
+from src.cli.utils import ConfigManager, resolve_swarm_id, SwarmIdError
 from src.cli.utils.config import ConfigError
 
 console = Console()
@@ -172,17 +172,14 @@ def _handle_delete(delete_id: str, json_flag: bool) -> None:
 
 
 def _handle_archive_all(
-    swarm_id: str, json_flag: bool,
+    swarm_id: str | None, json_flag: bool,
 ) -> None:
     """Archive all read messages in a swarm."""
-    if not swarm_id:
-        format_error(
-            console, "Swarm ID is required for --archive-all",
-            hint="Use -s/--swarm <swarm_id>",
-        )
-        raise typer.Exit(code=2)
     try:
-        swarm_uuid = validate_swarm_id(swarm_id)
+        swarm_uuid = resolve_swarm_id(swarm_id)
+    except SwarmIdError as e:
+        format_error(console, str(e))
+        raise typer.Exit(code=2)
     except ValueError as e:
         format_error(console, str(e))
         raise typer.Exit(code=2)
@@ -257,15 +254,12 @@ def messages_command(
         )
         raise typer.Exit(code=2)
 
-    # Validate swarm_id
-    if not swarm_id:
-        format_error(
-            console, "Swarm ID is required for listing messages",
-            hint="Use -s/--swarm <swarm_id>",
-        )
-        raise typer.Exit(code=2)
+    # Resolve swarm_id via fallback chain
     try:
-        swarm_uuid = validate_swarm_id(swarm_id)
+        swarm_uuid = resolve_swarm_id(swarm_id)
+    except SwarmIdError as e:
+        format_error(console, str(e))
+        raise typer.Exit(code=2)
     except ValueError as e:
         format_error(console, str(e))
         raise typer.Exit(code=2)
