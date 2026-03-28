@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import sys
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -9,7 +10,7 @@ import typer
 from rich.console import Console
 
 from src.cli.output import format_error, format_success, json_output
-from src.cli.utils import ConfigManager, validate_swarm_id
+from src.cli.utils import ConfigManager, resolve_swarm_id, SwarmIdError
 from src.cli.utils.config import ConfigError
 from src.cli.utils.validation import validate_message_content
 from src.client import Message, SwarmClient
@@ -82,16 +83,35 @@ async def _send_message(swarm_id: UUID, content: str, recipient: str | None) -> 
 
 
 def send_command(
-    swarm_id: str = typer.Option(..., "--swarm", "-s", help="Swarm ID to send to"),
-    message: str = typer.Option(..., "--message", "-m", help="Message content"),
-    to: str = typer.Option(
-        None, "--to", "-t", help="Recipient agent ID (default: broadcast)"
-    ),
-    json_flag: bool = typer.Option(False, "--json", help="Output as JSON"),
+    swarm_id: str | None,
+    message: str | None,
+    to: str | None,
+    json_flag: bool,
 ) -> None:
     """Send a message to a swarm or specific member."""
+    # Resolve swarm ID via fallback chain
     try:
-        swarm_uuid = validate_swarm_id(swarm_id)
+        swarm_uuid = resolve_swarm_id(swarm_id)
+    except SwarmIdError as e:
+        format_error(console, str(e))
+        raise typer.Exit(code=2)
+    except ValueError as e:
+        format_error(console, str(e))
+        raise typer.Exit(code=2)
+
+    # Resolve message content: flag or stdin
+    if not message and not sys.stdin.isatty():
+        message = sys.stdin.read().strip()
+
+    if not message:
+        format_error(
+            console,
+            "Message content required",
+            hint="Use -m/--message/--body 'text' or pipe via stdin",
+        )
+        raise typer.Exit(code=2)
+
+    try:
         content = validate_message_content(message)
     except ValueError as e:
         format_error(console, str(e))

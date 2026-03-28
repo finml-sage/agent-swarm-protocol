@@ -6,7 +6,12 @@ import typer
 from rich.console import Console
 
 from src.cli.output import format_error, format_success, json_output
-from src.cli.utils import ConfigManager, validate_agent_id, validate_swarm_id
+from src.cli.utils import (
+    ConfigManager,
+    SwarmIdError,
+    resolve_swarm_id,
+    validate_agent_id,
+)
 from src.cli.utils.config import ConfigError
 from src.state import DatabaseManager, MuteRepository
 
@@ -40,9 +45,9 @@ async def _unmute_swarm(swarm_id: str) -> bool:
 
 
 def unmute_command(
-    agent_id: str = typer.Option(None, "--agent", "-a", help="Agent ID to unmute"),
-    swarm_id: str = typer.Option(None, "--swarm", "-s", help="Swarm ID to unmute"),
-    json_flag: bool = typer.Option(False, "--json", help="Output as JSON"),
+    agent_id: str | None,
+    swarm_id: str | None,
+    json_flag: bool,
 ) -> None:
     """Unmute a previously muted agent or swarm."""
     if not agent_id and not swarm_id:
@@ -59,13 +64,13 @@ def unmute_command(
             was_muted = asyncio.run(_unmute_agent(validated_id))
             target_type, target_id = "agent", validated_id
         else:
-            validate_swarm_id(swarm_id)
-            was_muted = asyncio.run(_unmute_swarm(swarm_id))
-            target_type, target_id = "swarm", swarm_id
+            swarm_uuid = resolve_swarm_id(swarm_id)
+            was_muted = asyncio.run(_unmute_swarm(str(swarm_uuid)))
+            target_type, target_id = "swarm", str(swarm_uuid)
     except ConfigError as e:
         format_error(console, str(e), hint="Run 'swarm init' to configure your agent")
         raise typer.Exit(code=1)
-    except ValueError as e:
+    except (SwarmIdError, ValueError) as e:
         format_error(console, str(e))
         raise typer.Exit(code=2)
     except Exception as e:
