@@ -13,7 +13,12 @@ import httpx
 import typer
 from rich.console import Console
 
-from src.cli.output import format_error, format_success, format_table, json_output
+from src.cli.output import (
+    format_error,
+    format_success,
+    json_output,
+    render_batch,
+)
 from src.cli.utils import ConfigManager, resolve_swarm_id, SwarmIdError
 from src.cli.utils.config import ConfigError
 
@@ -294,33 +299,13 @@ def messages_command(
         if unread_ids:
             _run_async(_batch_mark_read(base_url, unread_ids), "mark messages as read")
 
-    if json_flag:
-        payload = {"swarm_id": sid, "count": len(msgs), "messages": msgs}
-        if unread_ids:
-            payload["marked_read"] = len(unread_ids)
-        json_output(console, payload)
-        return
     if not msgs:
         console.print("[yellow]No messages found[/yellow]")
         return
 
-    # Build header with counts
-    header = f"Inbox ({len(msgs)} messages)"
+    # TOON rendering -- the only output format for message listing
+    header_line = f"Inbox ({len(msgs)} messages)"
     if unread_ids:
-        header += f" - {len(unread_ids)} marked as read"
-
-    rows = [
-        (
-            m["message_id"][:12] + "...",
-            m["sender_id"],
-            m["status"],
-            m["received_at"][:19],
-            m.get("content_preview", ""),
-        )
-        for m in msgs
-    ]
-    format_table(
-        console, header,
-        ["ID", "Sender", "Status", "Received", "Content"],
-        rows,
-    )
+        header_line += f" - {len(unread_ids)} marked as read"
+    console.print(f"[dim]{header_line}[/dim]\n")
+    console.print(render_batch(msgs))

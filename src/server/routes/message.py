@@ -4,6 +4,7 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Optional
 
+import toon
 from fastapi import APIRouter, Request, status
 
 from src.server.models.requests import MessageRequest
@@ -37,13 +38,16 @@ def create_message_router(db: DatabaseManager) -> APIRouter:
         After persistence, the wake trigger (if configured) evaluates
         whether to WAKE, QUEUE, or SKIP the message.
         """
+        msg_dict = body.model_dump(exclude_none=True)
+        toon_content = toon.encode(msg_dict)
+
         inbox_msg = InboxMessage(
             message_id=body.message_id,
             swarm_id=body.swarm_id,
             sender_id=body.sender.agent_id,
             recipient_id=body.recipient,
             message_type=body.type,
-            content=body.model_dump_json(),
+            content=toon_content,
             received_at=datetime.now(timezone.utc),
             status=InboxStatus.UNREAD,
         )
