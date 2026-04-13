@@ -2,7 +2,7 @@
 import asyncio
 from pathlib import Path
 
-import toon
+import toon_format
 from fastapi.testclient import TestClient
 
 from src.server.app import create_app
@@ -85,7 +85,7 @@ class TestMessagePersistence:
             assert stored.status == InboxStatus.UNREAD
             assert stored.recipient_id == msg["recipient"]
             # content stores the full TOON payload
-            payload = toon.decode(stored.content)
+            payload = toon_format.decode(stored.content)
             assert payload["content"] == "Hello from integration test"
             assert payload["signature"] == msg["signature"]
             await db.close()
