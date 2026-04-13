@@ -9,7 +9,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, patch
 
-import toon_format
+import toon
 from typer.testing import CliRunner
 
 from src.cli.main import app
@@ -40,7 +40,7 @@ def _init_agent(monkeypatch, config_dir: Path) -> None:
 
 def _sample_message(status: str = "unread") -> dict:
     """Return a sample inbox message dict with TOON content_preview."""
-    toon_content = toon_format.encode({
+    toon_content = toon.encode({
         "sender": {"agent_id": "sender-agent"},
         "recipient": "test-agent",
         "type": "chat",

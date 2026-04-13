@@ -4,7 +4,7 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Optional
 
-import toon_format
+import toon
 from fastapi import APIRouter, Request, status
 
 from src.server.models.requests import MessageRequest
@@ -39,7 +39,7 @@ def create_message_router(db: DatabaseManager) -> APIRouter:
         whether to WAKE, QUEUE, or SKIP the message.
         """
         msg_dict = body.model_dump(exclude_none=True)
-        toon_content = toon_format.encode(msg_dict)
+        toon_content = toon.encode(msg_dict)
 
         inbox_msg = InboxMessage(
             message_id=body.message_id,

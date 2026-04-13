@@ -11,7 +11,7 @@ Covers:
 
 import json
 
-import toon_format
+import toon
 
 from src.cli.output.v2_renderer import render_batch, render_message
 
@@ -41,7 +41,7 @@ def _toon_message(**overrides: object) -> str:
         "signature": "Rk9PQkFSbase64sig==",
     }
     msg.update(overrides)
-    return toon_format.encode(msg)
+    return toon.encode(msg)
 
 
 def _json_message(**overrides: object) -> str:
@@ -86,7 +86,7 @@ class TestRenderMessageToon:
         assert "Hello from test" in result
 
     def test_simple_toon_object(self):
-        content = toon_format.encode({"name": "Alice", "status": "active"})
+        content = toon.encode({"name": "Alice", "status": "active"})
         result = render_message(content)
         assert result == content
         assert "name: Alice" in result
@@ -115,7 +115,7 @@ class TestRenderMessageLegacyJson:
         original = {"from": "sage", "to": "nexus", "content": "test"}
         json_str = json.dumps(original)
         result = render_message(json_str)
-        decoded = toon_format.decode(result)
+        decoded = toon.decode(result)
         assert decoded == original
 
     def test_malformed_json_returns_raw(self):
@@ -164,14 +164,14 @@ class TestRenderMessageSpecialChars:
     def test_quotes_in_content(self):
         toon_str = _toon_message(content='He said "hello"')
         result = render_message(toon_str)
-        decoded = toon_format.decode(result)
+        decoded = toon.decode(result)
         assert decoded["content"] == 'He said "hello"'
 
     def test_newlines_in_json_content(self):
         json_str = _json_message(content="line1\nline2\nline3")
         result = render_message(json_str)
         assert not result.startswith("{")
-        decoded = toon_format.decode(result)
+        decoded = toon.decode(result)
         assert decoded["content"] == "line1\nline2\nline3"
 
     def test_unicode_in_content(self):
@@ -183,7 +183,7 @@ class TestRenderMessageSpecialChars:
     def test_backslashes_in_json_content(self):
         json_str = _json_message(content="path\\to\\file")
         result = render_message(json_str)
-        decoded = toon_format.decode(result)
+        decoded = toon.decode(result)
         assert decoded["content"] == "path\\to\\file"
 
 
@@ -198,14 +198,14 @@ class TestRenderMessageNestedSections:
     def test_nested_sender_object(self):
         toon_str = _toon_message()
         result = render_message(toon_str)
-        decoded = toon_format.decode(result)
+        decoded = toon.decode(result)
         assert decoded["sender"]["agent_id"] == "finml-sage"
         assert decoded["sender"]["endpoint"] == "https://sage.marbell.com/swarm"
 
     def test_json_with_nested_converts(self):
         json_str = _json_message()
         result = render_message(json_str)
-        decoded = toon_format.decode(result)
+        decoded = toon.decode(result)
         assert isinstance(decoded["sender"], dict)
         assert decoded["sender"]["agent_id"] == "finml-sage"
 

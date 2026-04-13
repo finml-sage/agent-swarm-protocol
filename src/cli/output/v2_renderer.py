@@ -7,7 +7,7 @@ New messages are stored as TOON.  Legacy messages stored as JSON
 import json
 from typing import Any
 
-import toon_format
+import toon
 
 
 def render_message(content_str: str) -> str:
@@ -28,7 +28,7 @@ def render_message(content_str: str) -> str:
         try:
             msg_dict = json.loads(content_str)
             msg_dict = {k: v for k, v in msg_dict.items() if v is not None}
-            return toon_format.encode(msg_dict)
+            return toon.encode(msg_dict)
         except (json.JSONDecodeError, TypeError):
             return content_str
 
