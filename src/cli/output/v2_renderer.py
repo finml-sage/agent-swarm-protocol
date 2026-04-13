@@ -24,9 +24,10 @@ def render_message(content_str: str) -> str:
         return ""
 
     if content_str.startswith("{"):
-        # Legacy JSON message -- convert to TOON
+        # Legacy JSON message -- convert to TOON, strip null fields
         try:
             msg_dict = json.loads(content_str)
+            msg_dict = {k: v for k, v in msg_dict.items() if v is not None}
             return toon.encode(msg_dict)
         except (json.JSONDecodeError, TypeError):
             return content_str
