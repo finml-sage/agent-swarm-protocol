@@ -1,9 +1,8 @@
 """Integration tests: messages received via HTTP are persisted to inbox."""
 import asyncio
-import json
 from pathlib import Path
 
-import pytest
+import toon
 from fastapi.testclient import TestClient
 
 from src.server.app import create_app
@@ -85,8 +84,8 @@ class TestMessagePersistence:
             assert stored.message_type == msg["type"]
             assert stored.status == InboxStatus.UNREAD
             assert stored.recipient_id == msg["recipient"]
-            # content stores the full JSON payload
-            payload = json.loads(stored.content)
+            # content stores the full TOON payload
+            payload = toon.decode(stored.content)
             assert payload["content"] == "Hello from integration test"
             assert payload["signature"] == msg["signature"]
             await db.close()

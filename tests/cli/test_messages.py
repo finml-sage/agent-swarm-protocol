@@ -9,7 +9,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, patch
 
-import pytest
+import toon
 from typer.testing import CliRunner
 
 from src.cli.main import app
@@ -39,7 +39,13 @@ def _init_agent(monkeypatch, config_dir: Path) -> None:
 
 
 def _sample_message(status: str = "unread") -> dict:
-    """Return a sample inbox message dict."""
+    """Return a sample inbox message dict with TOON content_preview."""
+    toon_content = toon.encode({
+        "sender": {"agent_id": "sender-agent"},
+        "recipient": "test-agent",
+        "type": "chat",
+        "content": "Hello from test",
+    })
     return {
         "message_id": MSG_ID,
         "swarm_id": SWARM_ID,
@@ -47,7 +53,7 @@ def _sample_message(status: str = "unread") -> dict:
         "message_type": "chat",
         "status": status,
         "received_at": "2026-02-09T12:00:00+00:00",
-        "content_preview": "Hello from test",
+        "content_preview": toon_content,
     }
 
 
@@ -282,8 +288,8 @@ class TestMessagesList:
     @patch("src.cli.commands.messages._batch_mark_read", new_callable=AsyncMock)
     @patch("src.cli.commands.messages._fetch_inbox", new_callable=AsyncMock)
     @patch("src.cli.commands.messages._load_base_url", return_value=BASE_URL)
-    def test_list_displays_table(self, mock_url, mock_fetch, mock_batch, monkeypatch):
-        """Message list displays table with inbox header."""
+    def test_list_displays_toon(self, mock_url, mock_fetch, mock_batch, monkeypatch):
+        """Message list displays TOON format with inbox header."""
         mock_fetch.return_value = {"count": 1, "messages": [_sample_message()]}
         mock_batch.return_value = {"action": "read", "updated": 1, "total": 1}
 
@@ -296,12 +302,13 @@ class TestMessagesList:
         assert result.exit_code == 0
         assert "sender-agent" in result.stdout
         assert "Inbox" in result.stdout
+        assert "Hello from test" in result.stdout
 
     @patch("src.cli.commands.messages._batch_mark_read", new_callable=AsyncMock)
     @patch("src.cli.commands.messages._fetch_inbox", new_callable=AsyncMock)
     @patch("src.cli.commands.messages._load_base_url", return_value=BASE_URL)
-    def test_list_json_output(self, mock_url, mock_fetch, mock_batch, monkeypatch):
-        """Message list with --json includes marked_read count."""
+    def test_list_json_flag_ignored(self, mock_url, mock_fetch, mock_batch, monkeypatch):
+        """--json flag in list mode still produces TOON output (JSON only for --count)."""
         mock_fetch.return_value = {"count": 1, "messages": [_sample_message()]}
         mock_batch.return_value = {"action": "read", "updated": 1, "total": 1}
 
@@ -314,30 +321,9 @@ class TestMessagesList:
             )
 
         assert result.exit_code == 0
-        data = json.loads(result.stdout)
-        assert data["swarm_id"] == SWARM_ID
-        assert data["count"] == 1
-        assert data["marked_read"] == 1
-        assert len(data["messages"]) == 1
-
-    @patch("src.cli.commands.messages._batch_mark_read", new_callable=AsyncMock)
-    @patch("src.cli.commands.messages._fetch_inbox", new_callable=AsyncMock)
-    @patch("src.cli.commands.messages._load_base_url", return_value=BASE_URL)
-    def test_list_json_no_mark_read(self, mock_url, mock_fetch, mock_batch, monkeypatch):
-        """JSON output with --no-mark-read omits marked_read field."""
-        mock_fetch.return_value = {"count": 1, "messages": [_sample_message()]}
-
-        with TemporaryDirectory() as tmpdir:
-            config_dir = Path(tmpdir) / "swarm"
-            _init_agent(monkeypatch, config_dir)
-
-            result = runner.invoke(
-                app, ["messages", "-s", SWARM_ID, "--json", "--no-mark-read"],
-            )
-
-        assert result.exit_code == 0
-        data = json.loads(result.stdout)
-        assert "marked_read" not in data
+        # TOON format, not JSON -- --json does not apply to list mode
+        assert "sender-agent" in result.stdout
+        assert "Inbox" in result.stdout
 
 
 # ---------------------------------------------------------------------------
