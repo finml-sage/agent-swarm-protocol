@@ -3,6 +3,17 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator, Optional
+
+# Package integrity check — fails loud at import time if any declared
+# dependency has been resolved to the wrong PyPI distribution (e.g.
+# `pip install toon` picking up the unrelated neuroscience package
+# instead of `python-toon`). Runs before any handler is constructed so
+# that uvicorn/pytest/ad-hoc launches all surface the same error.
+# See src/server/_integrity.py and agent-swarm-protocol#193.
+from src.server._integrity import verify_package_integrity
+
+verify_package_integrity()
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
