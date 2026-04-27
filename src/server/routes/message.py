@@ -9,6 +9,7 @@ from fastapi import APIRouter, Request, status
 
 from src.server.models.requests import MessageRequest
 from src.server.models.responses import MessageQueuedResponse
+from src.server.system_dispatch import dispatch_system_message
 from src.state.database import DatabaseManager
 from src.state.models.inbox import InboxMessage, InboxStatus
 from src.state.repositories.inbox import InboxRepository
@@ -17,7 +18,7 @@ from src.claude.wake_trigger import WakeTrigger
 logger = logging.getLogger(__name__)
 
 
-def create_message_router(db: DatabaseManager) -> APIRouter:
+def create_message_router(db: DatabaseManager, local_agent_id: str) -> APIRouter:
     """Create message router with injected dependencies."""
     router = APIRouter()
 
@@ -60,6 +61,20 @@ def create_message_router(db: DatabaseManager) -> APIRouter:
                     "Duplicate message %s ignored (idempotent)",
                     body.message_id,
                 )
+
+        # Receiver-side membership lifecycle dispatch (issue #197). Fire
+        # AFTER inbox persistence so the message is durably recorded even
+        # if the dispatcher (which may make a network call to /swarm/info)
+        # raises. The dispatcher swallows its own errors but the wrap is
+        # belt-and-suspenders: a system-message side effect must never
+        # prevent message acceptance.
+        try:
+            await dispatch_system_message(db, body, local_agent_id)
+        except Exception as exc:
+            logger.warning(
+                "System dispatch failed for message %s: %s",
+                body.message_id, exc,
+            )
 
         # Fire-and-forget wake trigger evaluation (non-blocking).
         # Catch all exceptions: wake is a side effect that must never
