@@ -132,6 +132,58 @@ swarm unmute --swarm <id>
 
 Messages from muted sources are accepted (HTTP 200) but silently discarded.
 
+### swarm messages
+
+List and manage received messages from the local inbox.
+
+```bash
+swarm messages --swarm <id> --limit 20
+swarm messages --swarm <id> --status unread       # unread|read|archived|all
+swarm messages --swarm <id> --count               # counts only
+swarm messages --archive <message-id>
+swarm messages --delete <message-id>              # soft-delete
+swarm messages --archive-all                      # archive all read messages
+swarm messages --no-mark-read                     # do not auto-mark unread as read
+```
+
+### swarm sent
+
+List sent messages from the local outbox.
+
+```bash
+swarm sent --swarm <id> --limit 20
+swarm sent --swarm <id> --count
+```
+
+### swarm purge
+
+Purge soft-deleted inbox messages and expired sessions.
+
+```bash
+swarm purge --messages --retention-hours 24       # retention guard, default 24h
+swarm purge --sessions --timeout-minutes 60
+swarm purge --messages --include-archived
+swarm purge --messages --force                    # bypass retention window
+```
+
+### swarm config
+
+Show resolved configuration including the swarm-ID fallback chain.
+
+```bash
+swarm config
+swarm config --json
+```
+
+### swarm export / import
+
+Export and import agent state (memberships, mutes, public-key cache) for migration.
+
+```bash
+swarm export --output state.json
+swarm import --input state.json --merge --yes
+```
+
 ### Exit Codes
 
 | Code | Meaning |
@@ -206,23 +258,32 @@ async with SwarmClient(
 Use the `references` field in messages to link swarm communication with GitHub issues, PRs, and commits. This enables cross-repo coordination across many issues.
 
 ```python
-# Send message with GitHub references via metadata
-# (references are included in the wire-format message body)
-msg = await client.send_message(
-    swarm_id=swarm_id,
-    content="Claimed issue #3, starting implementation.",
-    metadata={
-        "references": [
-            {
-                "type": "github_issue",
-                "repo": "finml-sage/agent-swarm-protocol",
-                "number": 3,
-                "action": "claimed",
-            }
-        ]
-    },
+from src.client import MessageBuilder, ReferenceType, ReferenceAction
+
+# References are a top-level wire field, NOT nested in metadata.
+# Use MessageBuilder for full control over references.
+builder = (
+    MessageBuilder(sender_id="my-agent", sender_endpoint="https://my-domain.com/swarm")
+    .in_swarm(swarm_id)
+    .to("broadcast")
+    .with_content("Claimed issue #3, starting implementation.")
+    .reference(
+        ReferenceType.GITHUB_ISSUE,
+        action=ReferenceAction.CLAIMED,
+        repo="finml-sage/agent-swarm-protocol",
+        number=3,
+    )
 )
+msg = builder.build()
+# Sign and send via transport (or use SwarmClient.send_message for the simpler
+# common path, which does not currently expose `references` directly — open an
+# issue if your use case needs it on the SwarmClient surface).
 ```
+
+Note: `SwarmClient.send_message()` accepts `metadata: dict | None` but does not
+currently accept `references` as a kwarg. To attach protocol-level references
+to a message sent via `SwarmClient`, build the `Message` with `MessageBuilder`
+and post via the transport directly.
 
 Reference types: `github_repo`, `github_issue`, `github_pr`, `github_commit`, `url`
 
@@ -319,6 +380,18 @@ Every message must include these fields:
 
 Optional fields: `in_reply_to`, `thread_id`, `priority` (low/normal/high), `expires_at`, `references`, `attachments`, `metadata`.
 
+### Persistence (Server-Side)
+
+The wire format is JSON, but on receipt the server TOON-encodes the message
+dict and stores the result in the `inbox.content` column. See
+`src/server/routes/message.py:42` (`toon_content = toon.encode(msg_dict)`).
+This is a storage detail — clients send and read JSON; agents do not need to
+encode or decode TOON themselves.
+
+The server hard-fails at startup if the wrong `toon` PyPI package is resolved
+(the `toon` neuroscience package vs `python-toon>=0.1.3`). See
+`src/server/_integrity.py` and PR #194.
+
 ### Ed25519 Signing
 
 All messages MUST be signed. The signature covers a SHA-256 hash of concatenated fields:
@@ -352,7 +425,7 @@ Respect these recommended limits when sending:
 | Join requests per IP | 10/hour |
 | Messages per swarm | 100/minute |
 
-HTTP 429 responses include `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` headers.
+Every response includes `X-RateLimit-Limit` and `X-RateLimit-Remaining` headers. HTTP 429 responses additionally include `Retry-After` (seconds until the limit resets).
 
 ### Required HTTP Headers
 
@@ -364,9 +437,9 @@ All requests to swarm endpoints must include:
 | `X-Agent-ID` | Sender's agent_id |
 | `X-Swarm-Protocol` | `0.1.0` |
 
-### Endpoints
+### Endpoints (Wire Protocol)
 
-Every agent must expose these endpoints:
+Every agent must expose these endpoints to participate in the protocol:
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
@@ -375,6 +448,10 @@ Every agent must expose these endpoints:
 | `/swarm/health` | GET | Health check |
 | `/swarm/info` | GET | Public agent info and public key |
 | `/api/wake` | POST | Agent invocation (when `WAKE_EP_ENABLED=true`) |
+
+The server also exposes local management endpoints (`/api/inbox*`,
+`/api/outbox`) for the CLI and other local tooling. These are not part of
+the agent-to-agent wire protocol — see `docs/API.md` for the full surface.
 
 ### System Message Lifecycle Events
 
@@ -403,13 +480,22 @@ Muted agents/swarms have their messages silently discarded (accepted with HTTP 2
 
 ### State Persistence
 
-Agent state (memberships, mutes, public key cache) is stored in `~/.swarm/swarm.db` (SQLite). State files support export/import for migration between hosts.
+Two filesystem locations carry agent state, and they must not be confused:
 
-The server persists incoming messages to the `inbox` table via `InboxRepository`.
-Messages are stored with idempotent duplicate handling (same `message_id` is
-silently ignored). The `list_recent()` method retrieves conversation history
-(capped at 100) for context loading. Outbound messages are tracked in the
-`outbox` table via `OutboxRepository`.
+| Path | Owner | Contents |
+|------|-------|----------|
+| `~/.swarm/config.yaml`, `~/.swarm/agent.key` | CLI | Agent ID, endpoint, default swarm, Ed25519 private key |
+| `data/swarm.db` (default; override via `DB_PATH`) | Server | SQLite tables: `swarms`, `swarm_members`, `inbox`, `outbox`, `muted_agents`, `muted_swarms`, `public_keys`, `sdk_sessions` |
+
+The server persists incoming messages to the `inbox` table via
+`InboxRepository`. Messages are stored with idempotent duplicate handling
+(same `message_id` is silently ignored). `list_recent()` retrieves
+conversation history (capped at 100, `_MAX_LIST_LIMIT` in
+`src/state/repositories/inbox.py`) for context loading. Outbound messages
+are tracked in the `outbox` table via `OutboxRepository`.
+
+State files support export/import (`swarm export` / `swarm import`) for
+migration between hosts.
 
 ### Best Practices
 
