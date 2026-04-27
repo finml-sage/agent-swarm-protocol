@@ -21,6 +21,11 @@ class AgentConfig:
     capabilities: tuple[str, ...] = ("message", "system", "notification")
     name: Optional[str] = None
     description: Optional[str] = None
+    # Optional path to the agent's Ed25519 private key file (32 raw bytes).
+    # Required for master-side broadcasts (#200) — when None, the join
+    # handler logs a warning and skips the cross-host fan-out, falling
+    # back to local-inbox-only notification (legacy behaviour).
+    private_key_path: Optional[Path] = None
 
 
 @dataclass(frozen=True)
@@ -135,6 +140,9 @@ def load_config_from_env() -> ServerConfig:
             "Set it to a tmux session target (e.g. 'main:0')."
         )
 
+    private_key_path_env = os.environ.get("AGENT_PRIVATE_KEY_PATH", "")
+    private_key_path = Path(private_key_path_env) if private_key_path_env else None
+
     return ServerConfig(
         agent=AgentConfig(
             agent_id=agent_id,
@@ -142,6 +150,7 @@ def load_config_from_env() -> ServerConfig:
             public_key=public_key,
             name=os.environ.get("AGENT_NAME"),
             description=os.environ.get("AGENT_DESCRIPTION"),
+            private_key_path=private_key_path,
         ),
         rate_limit=RateLimitConfig(
             messages_per_minute=int(os.environ.get("RATE_LIMIT_MESSAGES_PER_MINUTE", "60")),
