@@ -30,13 +30,21 @@ class LifecycleAction(Enum):
 
 @dataclass(frozen=True)
 class LifecycleEvent:
-    """A swarm lifecycle event to be recorded as a system notification."""
+    """A swarm lifecycle event to be recorded as a system notification.
+
+    For ``MEMBER_JOINED`` events, ``endpoint`` and ``joined_at`` SHOULD be
+    populated so receiver-side dispatchers (see ``system_dispatch.py``) can
+    write the new agent into ``swarm_members`` with the authoritative
+    master-side values rather than envelope fallbacks (#199).
+    """
 
     action: LifecycleAction
     swarm_id: str
     agent_id: str
     initiated_by: Optional[str] = None
     reason: Optional[str] = None
+    endpoint: Optional[str] = None
+    joined_at: Optional[str] = None
 
 
 def build_notification_message(event: LifecycleEvent) -> InboxMessage:
@@ -44,17 +52,26 @@ def build_notification_message(event: LifecycleEvent) -> InboxMessage:
 
     The message content is a JSON-serialisable string matching the
     protocol's system message format (type=system, action=<lifecycle>).
+    Optional fields (``initiated_by``, ``reason``, ``endpoint``,
+    ``joined_at``) are emitted when set and omitted when ``None`` to keep
+    the payload narrow for non-join events.
     """
     import json
 
-    content = json.dumps({
+    payload: dict = {
         "type": "system",
         "action": event.action.value,
         "swarm_id": event.swarm_id,
         "agent_id": event.agent_id,
         "initiated_by": event.initiated_by,
         "reason": event.reason,
-    })
+    }
+    if event.endpoint is not None:
+        payload["endpoint"] = event.endpoint
+    if event.joined_at is not None:
+        payload["joined_at"] = event.joined_at
+
+    content = json.dumps(payload)
     return InboxMessage(
         message_id=str(uuid.uuid4()),
         swarm_id=event.swarm_id,
@@ -99,17 +116,25 @@ async def notify_member_joined(
     db: DatabaseManager,
     swarm_id: str,
     agent_id: str,
+    endpoint: Optional[str] = None,
+    joined_at: Optional[str] = None,
 ) -> InboxMessage:
-    """Record a member_joined notification.
+    """Record a member_joined notification on the local inbox.
 
-    Called after a successful join to broadcast awareness to existing
-    members. The notification is persisted but delivery is handled
-    separately by the messaging layer.
+    Called after a successful join to record awareness on the master's
+    own inbox. Cross-host delivery to existing members is handled
+    separately by ``broadcast_member_joined`` in ``broadcast.py``.
+
+    ``endpoint`` and ``joined_at`` are passed into the payload (#199) so
+    the same ``LifecycleEvent`` shape can be reused for the cross-host
+    broadcast — receivers need both fields to populate ``swarm_members``.
     """
     event = LifecycleEvent(
         action=LifecycleAction.MEMBER_JOINED,
         swarm_id=swarm_id,
         agent_id=agent_id,
+        endpoint=endpoint,
+        joined_at=joined_at,
     )
     return await persist_notification(db, event)
 
