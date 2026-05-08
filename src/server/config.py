@@ -53,11 +53,14 @@ class WakeEndpointConfig:
 
     Enabled by default.  Set ``WAKE_EP_ENABLED=false`` to disable.
 
-    ``invoke_method``: how to start the agent -- 'tmux' or 'noop'.
+    ``invoke_method``: how to start the agent -- 'tmux', 'zellij', or 'noop'.
     ``secret``: shared secret for X-Wake-Secret header auth. Empty disables auth.
     ``session_file``: path to session state file for duplicate-invocation guard.
     ``session_timeout_minutes``: how long before an active session is considered expired.
     ``tmux_target``: tmux session/window/pane target for the tmux relay method.
+    ``zellij_session``: zellij session name for the zellij relay method
+        (passed via ``zellij --session``; the focused pane of that
+        session receives the notification).
     """
 
     enabled: bool = True
@@ -66,6 +69,7 @@ class WakeEndpointConfig:
     session_file: str = "/root/.swarm/session.json"
     session_timeout_minutes: int = 30
     tmux_target: str = ""
+    zellij_session: str = ""
 
 
 @dataclass(frozen=True)
@@ -140,6 +144,13 @@ def load_config_from_env() -> ServerConfig:
             "Set it to a tmux session target (e.g. 'main:0')."
         )
 
+    zellij_session = os.environ.get("WAKE_EP_ZELLIJ_SESSION", "")
+    if wake_ep_enabled and invoke_method == "zellij" and not zellij_session:
+        raise ValueError(
+            "WAKE_EP_ZELLIJ_SESSION required when WAKE_EP_INVOKE_METHOD is 'zellij'. "
+            "Set it to a zellij session name (e.g. 'codex')."
+        )
+
     private_key_path_env = os.environ.get("AGENT_PRIVATE_KEY_PATH", "")
     private_key_path = Path(private_key_path_env) if private_key_path_env else None
 
@@ -172,5 +183,6 @@ def load_config_from_env() -> ServerConfig:
                 os.environ.get("WAKE_EP_SESSION_TIMEOUT", "30")
             ),
             tmux_target=tmux_target,
+            zellij_session=zellij_session,
         ),
     )

@@ -19,6 +19,7 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from src.server.config import ServerConfig, load_config_from_env
 from src.server.invoke_tmux import TmuxInvokeConfig
+from src.server.invoke_zellij import ZellijInvokeConfig
 from src.server.invoker import AgentInvoker
 from src.server.middleware.rate_limit import RateLimitMiddleware
 from src.server.middleware.logging import RequestLoggingMiddleware
@@ -57,11 +58,15 @@ def _build_invoker(config: ServerConfig) -> AgentInvoker:
     """Build an AgentInvoker from the wake endpoint configuration."""
     wep = config.wake_endpoint
     tmux_config = None
+    zellij_config = None
     if wep.invoke_method == "tmux":
         tmux_config = TmuxInvokeConfig(tmux_target=wep.tmux_target)
+    elif wep.invoke_method == "zellij":
+        zellij_config = ZellijInvokeConfig(zellij_session=wep.zellij_session)
     return AgentInvoker(
         method=wep.invoke_method,
         tmux_config=tmux_config,
+        zellij_config=zellij_config,
     )
 
 
