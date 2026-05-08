@@ -6,8 +6,10 @@ Enter``.  This is the zellij peer to ``invoke_tmux``: a simple IPC
 mechanism -- no SDK, no AI relay, just format a string and deliver it
 into the focused pane of the named zellij session.
 
-argv shape (verified against zellij 0.45.0
-``zellij-utils/src/cli.rs::CliAction``):
+argv shape (verified against zellij v0.44.2
+``zellij-utils/src/cli.rs::CliAction`` -- lines 728 ``WriteChars`` and
+742 ``SendKeys``; v0.44.2 is the latest release tag on the canonical
+``zellij-org/zellij`` repo as of 2026-05-08):
 
   * write-chars: ``zellij --session SESSION action write-chars TEXT``
   * send-keys:   ``zellij --session SESSION action send-keys "Enter"``
