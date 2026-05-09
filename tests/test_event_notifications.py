@@ -165,6 +165,42 @@ class TestBuildNotificationMessage:
         msg = build_notification_message(event)
         assert msg.status == InboxStatus.UNREAD
 
+    def test_member_joined_emits_public_key_when_set(self) -> None:
+        """#214: public_key travels in the broadcast payload when supplied."""
+        event = LifecycleEvent(
+            action=LifecycleAction.MEMBER_JOINED,
+            swarm_id=SWARM_ID,
+            agent_id="new-agent",
+            endpoint="https://new-agent.example.com/swarm",
+            joined_at="2026-05-09T09:11:59.885Z",
+            public_key="Jfz1FlEc2sjJIRn4C6av8I0ki3cgefG2SDisgbfZ9AY=",
+        )
+        msg = build_notification_message(event)
+        content = json.loads(msg.content)
+        assert content["action"] == "member_joined"
+        assert content["public_key"] == (
+            "Jfz1FlEc2sjJIRn4C6av8I0ki3cgefG2SDisgbfZ9AY="
+        )
+        assert content["endpoint"] == "https://new-agent.example.com/swarm"
+        assert content["joined_at"] == "2026-05-09T09:11:59.885Z"
+
+    def test_member_joined_omits_public_key_when_unset(self) -> None:
+        """Backward compat: missing public_key MUST be omitted, not null-emitted.
+
+        Receivers running a post-#214 build use ``payload.get("public_key")``
+        and treat None or missing as "fall back to /swarm/info fetch". An
+        explicit null in the payload would short-circuit that branch and
+        cause the receiver to insert with an invalid key.
+        """
+        event = LifecycleEvent(
+            action=LifecycleAction.MEMBER_JOINED,
+            swarm_id=SWARM_ID,
+            agent_id="legacy-agent",
+        )
+        msg = build_notification_message(event)
+        content = json.loads(msg.content)
+        assert "public_key" not in content
+
 
 class TestPersistNotification:
     """Tests for persisting notifications to the database."""

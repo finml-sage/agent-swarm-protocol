@@ -135,6 +135,7 @@ def create_join_router(config: ServerConfig, db: DatabaseManager) -> APIRouter:
                     agent_id=body.sender.agent_id,
                     endpoint=body.sender.endpoint,
                     joined_at=joined_at_iso,
+                    public_key=body.sender.public_key,
                 )
             except Exception as exc:
                 logger.warning(
@@ -143,12 +144,15 @@ def create_join_router(config: ServerConfig, db: DatabaseManager) -> APIRouter:
                     exc,
                 )
 
-            # Cross-host fan-out (#200): inform every existing member so
-            # PR #198's receiver dispatcher can write the new agent into
-            # their local swarm_members table. Wrap the entire call in
-            # try/except as belt-and-suspenders — broadcast.py already
-            # swallows per-member failures, but a config or signing-time
-            # error must not block join acceptance.
+            # Cross-host fan-out (#200, #214): inform every existing
+            # member so the receiver dispatcher (PR #198) can write the
+            # new agent into their local swarm_members table. Carrying
+            # the new member's public_key inline (#214) eliminates the
+            # receiver-side /swarm/info fetch race that hit live peers
+            # when a CF A-record was still propagating at broadcast time.
+            # Wrap the entire call in try/except as belt-and-suspenders
+            # — broadcast.py already swallows per-member failures, but a
+            # config or signing-time error must not block join acceptance.
             master_private_key = _load_master_private_key(config)
             if master_private_key is not None:
                 try:
@@ -161,6 +165,7 @@ def create_join_router(config: ServerConfig, db: DatabaseManager) -> APIRouter:
                         master_private_key=master_private_key,
                         new_agent_endpoint=body.sender.endpoint,
                         joined_at=joined_at_dt,
+                        new_agent_public_key=body.sender.public_key,
                     )
                 except Exception as exc:
                     logger.warning(

@@ -32,10 +32,16 @@ class LifecycleAction(Enum):
 class LifecycleEvent:
     """A swarm lifecycle event to be recorded as a system notification.
 
-    For ``MEMBER_JOINED`` events, ``endpoint`` and ``joined_at`` SHOULD be
-    populated so receiver-side dispatchers (see ``system_dispatch.py``) can
-    write the new agent into ``swarm_members`` with the authoritative
-    master-side values rather than envelope fallbacks (#199).
+    For ``MEMBER_JOINED`` events, ``endpoint``, ``joined_at`` and
+    ``public_key`` SHOULD be populated so receiver-side dispatchers (see
+    ``system_dispatch.py``) can write the new agent into
+    ``swarm_members`` directly from the broadcast payload — no
+    network fetch of the new member's ``/swarm/info`` required (#214).
+
+    Background (#214): the master always knows the new member's public
+    key (it just stored the row via ``add_member``). Carrying the key in
+    the broadcast eliminates the fetch race that hit live peers when an
+    agent's public DNS A-record was still propagating at broadcast time.
     """
 
     action: LifecycleAction
@@ -45,6 +51,7 @@ class LifecycleEvent:
     reason: Optional[str] = None
     endpoint: Optional[str] = None
     joined_at: Optional[str] = None
+    public_key: Optional[str] = None
 
 
 def build_notification_message(event: LifecycleEvent) -> InboxMessage:
@@ -70,6 +77,8 @@ def build_notification_message(event: LifecycleEvent) -> InboxMessage:
         payload["endpoint"] = event.endpoint
     if event.joined_at is not None:
         payload["joined_at"] = event.joined_at
+    if event.public_key is not None:
+        payload["public_key"] = event.public_key
 
     content = json.dumps(payload)
     return InboxMessage(
@@ -118,6 +127,7 @@ async def notify_member_joined(
     agent_id: str,
     endpoint: Optional[str] = None,
     joined_at: Optional[str] = None,
+    public_key: Optional[str] = None,
 ) -> InboxMessage:
     """Record a member_joined notification on the local inbox.
 
@@ -125,9 +135,11 @@ async def notify_member_joined(
     own inbox. Cross-host delivery to existing members is handled
     separately by ``broadcast_member_joined`` in ``broadcast.py``.
 
-    ``endpoint`` and ``joined_at`` are passed into the payload (#199) so
-    the same ``LifecycleEvent`` shape can be reused for the cross-host
-    broadcast — receivers need both fields to populate ``swarm_members``.
+    ``endpoint``, ``joined_at`` and ``public_key`` are passed into the
+    payload (#199, #214) so the same ``LifecycleEvent`` shape can be
+    reused for the cross-host broadcast — receivers need all three
+    fields to populate ``swarm_members`` directly from the broadcast
+    without fetching ``/swarm/info`` (#214).
     """
     event = LifecycleEvent(
         action=LifecycleAction.MEMBER_JOINED,
@@ -135,6 +147,7 @@ async def notify_member_joined(
         agent_id=agent_id,
         endpoint=endpoint,
         joined_at=joined_at,
+        public_key=public_key,
     )
     return await persist_notification(db, event)
 
