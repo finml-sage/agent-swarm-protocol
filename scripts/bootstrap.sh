@@ -71,6 +71,14 @@ error() {
     exit 1
 }
 
+display_join_url() {
+    if [[ -n "${JOIN_URL:-}" ]]; then
+        echo "<provided>"
+    else
+        echo "<none>"
+    fi
+}
+
 step() {
     echo ""
     echo -e "${CYAN}${BOLD}--- $* ---${NC}"
@@ -147,7 +155,7 @@ echo "  Agent ID:       ${AGENT_ID}"
 echo "  Domain:         ${DOMAIN}"
 echo "  Endpoint:       ${AGENT_ENDPOINT}"
 echo "  Contact email:  ${CONTACT_EMAIL}"
-echo "  Join URL:       ${JOIN_URL:-<none>}"
+echo "  Join URL:       $(display_join_url)"
 echo "  Tmux target:    ${TMUX_TARGET}"
 echo "  Install dir:    ${INSTALL_DIR}"
 echo "  DB path:        ${DB_PATH}"
@@ -558,7 +566,7 @@ if [[ -n "$JOIN_URL" ]]; then
         info "Successfully joined swarm."
     else
         warn "Join failed. You can retry manually:"
-        warn "  ${VENV_DIR}/bin/swarm join --token \"${JOIN_URL}\""
+        warn "  ${VENV_DIR}/bin/swarm join --token \"<invite-url>\""
     fi
 else
     info "No join URL provided. Skipping swarm join."
