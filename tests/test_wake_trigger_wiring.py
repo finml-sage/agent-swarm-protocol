@@ -1,18 +1,21 @@
 """Integration tests: WakeTrigger is called after message persistence."""
-import asyncio
-import json
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
+import asyncio
+from pathlib import Path
+from unittest.mock import AsyncMock, patch
+
 from fastapi.testclient import TestClient
 
+from src.claude.wake_trigger import WakeTrigger
 from src.server.app import create_app
 from src.server.config import (
-    AgentConfig, RateLimitConfig, ServerConfig, WakeConfig, WakeEndpointConfig,
+    AgentConfig,
+    RateLimitConfig,
+    ServerConfig,
+    WakeConfig,
+    WakeEndpointConfig,
     _parse_bool,
 )
-from src.claude.wake_trigger import WakeDecision, WakeTrigger
 from src.state.database import DatabaseManager
 from src.state.repositories.inbox import InboxRepository
 
@@ -38,6 +41,30 @@ def _make_config(tmp_path: Path, wake_enabled: bool = False) -> ServerConfig:
             timeout=2.0,
         ),
         wake_endpoint=WakeEndpointConfig(enabled=False),
+    )
+
+
+def _make_secret_config(tmp_path: Path) -> ServerConfig:
+    """Build a ServerConfig with wake trigger and matching wake endpoint secret."""
+    return ServerConfig(
+        agent=AgentConfig(
+            agent_id="test-agent-001",
+            endpoint="https://test.example.com",
+            public_key="dGVzdC1wdWJsaWMta2V5LWJhc2U2NA==",
+            protocol_version="0.1.0",
+        ),
+        rate_limit=RateLimitConfig(messages_per_minute=100),
+        db_path=tmp_path / "wake-secret.db",
+        wake=WakeConfig(
+            enabled=True,
+            endpoint="http://localhost:9090/api/wake",
+            timeout=2.0,
+        ),
+        wake_endpoint=WakeEndpointConfig(
+            enabled=True,
+            invoke_method="noop",
+            secret="test-secret",
+        ),
     )
 
 
@@ -80,7 +107,8 @@ class TestWakeTriggerDisabled:
         assert response.json()["status"] == "queued"
 
     def test_no_wake_trigger_on_app_state_when_disabled(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """app.state.wake_trigger is None when wake is disabled."""
         config = _make_config(tmp_path, wake_enabled=False)
@@ -94,7 +122,8 @@ class TestWakeTriggerEnabled:
     """When wake trigger is enabled, it runs after message persistence."""
 
     def test_wake_trigger_initialized_on_app_state(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """app.state.wake_trigger is a WakeTrigger when enabled."""
         config = _make_config(tmp_path, wake_enabled=True)
@@ -113,7 +142,8 @@ class TestWakeTriggerEnabled:
             mock_instance.__aenter__.return_value = mock_instance
             mock_instance.__aexit__.return_value = None
             mock_instance.post.return_value = AsyncMock(
-                status_code=200, text="",
+                status_code=200,
+                text="",
             )
             mock_http.return_value = mock_instance
 
@@ -134,7 +164,8 @@ class TestWakeTriggerEnabled:
             assert call_url == "http://localhost:9090/api/wake"
 
     def test_wake_trigger_payload_contains_message_id(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """Wake POST payload includes the message_id from the received message."""
         config = _make_config(tmp_path, wake_enabled=True)
@@ -144,7 +175,8 @@ class TestWakeTriggerEnabled:
             mock_instance.__aenter__.return_value = mock_instance
             mock_instance.__aexit__.return_value = None
             mock_instance.post.return_value = AsyncMock(
-                status_code=200, text="",
+                status_code=200,
+                text="",
             )
             mock_http.return_value = mock_instance
 
@@ -162,8 +194,40 @@ class TestWakeTriggerEnabled:
             assert payload["swarm_id"] == msg["swarm_id"]
             assert payload["sender_id"] == msg["sender"]["agent_id"]
 
+    def test_wake_trigger_uses_configured_endpoint_secret(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """WakeTrigger POST includes the configured wake endpoint secret."""
+        config = _make_secret_config(tmp_path)
+
+        with patch("src.claude.wake_trigger.httpx.AsyncClient") as mock_http:
+            mock_instance = AsyncMock()
+            mock_instance.__aenter__.return_value = mock_instance
+            mock_instance.__aexit__.return_value = None
+            mock_instance.post.return_value = AsyncMock(
+                status_code=200,
+                text="",
+            )
+            mock_http.return_value = mock_instance
+
+            app = create_app(config)
+            msg = _valid_message()
+            with TestClient(app) as client:
+                response = client.post(
+                    "/swarm/message",
+                    json=msg,
+                    headers={"Content-Type": "application/json"},
+                )
+
+            assert response.status_code == 200
+            assert mock_instance.post.call_args[1]["headers"] == {
+                "X-Wake-Secret": "test-secret",
+            }
+
     def test_message_still_queued_on_wake_failure(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """Even if the wake endpoint fails, the message is still accepted."""
         config = _make_config(tmp_path, wake_enabled=True)
@@ -173,7 +237,8 @@ class TestWakeTriggerEnabled:
             mock_instance.__aenter__.return_value = mock_instance
             mock_instance.__aexit__.return_value = None
             mock_instance.post.return_value = AsyncMock(
-                status_code=500, text="Internal error",
+                status_code=500,
+                text="Internal error",
             )
             mock_http.return_value = mock_instance
 
@@ -191,7 +256,8 @@ class TestWakeTriggerEnabled:
             assert response.json()["status"] == "queued"
 
     def test_message_still_queued_on_unexpected_exception(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         """Non-WakeTriggerError exceptions (e.g. ReadTimeout) are caught too."""
         config = _make_config(tmp_path, wake_enabled=True)
@@ -228,7 +294,8 @@ class TestWakeTriggerEnabled:
             mock_instance.__aenter__.return_value = mock_instance
             mock_instance.__aexit__.return_value = None
             mock_instance.post.return_value = AsyncMock(
-                status_code=200, text="",
+                status_code=200,
+                text="",
             )
             mock_http.return_value = mock_instance
 

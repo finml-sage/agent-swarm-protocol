@@ -1,4 +1,5 @@
 """FastAPI application factory."""
+
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -51,6 +52,7 @@ def _build_wake_trigger(
         wake_endpoint=config.wake.endpoint,
         preferences=NotificationPreferences(),
         wake_timeout=config.wake.timeout,
+        wake_secret=config.wake_endpoint.secret,
     )
 
 
@@ -93,7 +95,8 @@ def create_app(config: Optional[ServerConfig] = None) -> FastAPI:
         wake_trigger = _build_wake_trigger(config, db_manager)
         if wake_trigger is not None:
             logger.info(
-                "WakeTrigger active, endpoint=%s", config.wake.endpoint,
+                "WakeTrigger active, endpoint=%s",
+                config.wake.endpoint,
             )
         else:
             logger.info("WakeTrigger disabled")
@@ -109,7 +112,9 @@ def create_app(config: Optional[ServerConfig] = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.add_middleware(RequestLoggingMiddleware)
-    app.add_middleware(RateLimitMiddleware, requests_per_minute=config.rate_limit.messages_per_minute)
+    app.add_middleware(
+        RateLimitMiddleware, requests_per_minute=config.rate_limit.messages_per_minute
+    )
     app.add_exception_handler(ValidationError, _validation_error_handler)
     app.include_router(create_message_router(db_manager, config.agent.agent_id))
     app.include_router(create_join_router(config, db_manager))
@@ -135,7 +140,8 @@ def create_app(config: Optional[ServerConfig] = None) -> FastAPI:
             )
         )
         logger.info(
-            "Wake endpoint active, method=%s", config.wake_endpoint.invoke_method,
+            "Wake endpoint active, method=%s",
+            config.wake_endpoint.invoke_method,
         )
     else:
         logger.info("Wake endpoint disabled")
@@ -143,6 +149,14 @@ def create_app(config: Optional[ServerConfig] = None) -> FastAPI:
     return app
 
 
-async def _validation_error_handler(request: Request, exc: ValidationError) -> JSONResponse:
-    response = ErrorResponse(error=ErrorDetail(code="INVALID_FORMAT", message="Request validation failed", details={"validation_errors": exc.errors()}))
+async def _validation_error_handler(
+    request: Request, exc: ValidationError
+) -> JSONResponse:
+    response = ErrorResponse(
+        error=ErrorDetail(
+            code="INVALID_FORMAT",
+            message="Request validation failed",
+            details={"validation_errors": exc.errors()},
+        )
+    )
     return JSONResponse(status_code=400, content=response.model_dump())
