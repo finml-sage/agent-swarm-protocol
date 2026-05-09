@@ -199,6 +199,43 @@ class TestBuildBroadcastEnvelope:
         assert content["joined_at"] == "2026-04-27T06:21:32.000Z"
         assert content["swarm_id"] == SWARM_ID
 
+    def test_payload_includes_public_key_when_supplied(self) -> None:
+        """#214: receiver can populate swarm_members directly when key is inline."""
+        private_key = Ed25519PrivateKey.generate()
+        envelope = build_broadcast_envelope(
+            swarm_id=SWARM_ID,
+            master_id=MASTER_ID,
+            master_endpoint=MASTER_ENDPOINT,
+            master_private_key=private_key,
+            new_agent_id=NEW_AGENT_ID,
+            new_agent_endpoint=NEW_AGENT_ENDPOINT,
+            joined_at=datetime(2026, 5, 9, 9, 11, 59, tzinfo=timezone.utc),
+            new_agent_public_key=NEW_AGENT_PUBKEY_B64,
+        )
+        content = json.loads(envelope["content"])
+        assert content["public_key"] == NEW_AGENT_PUBKEY_B64
+
+    def test_payload_omits_public_key_when_not_supplied(self) -> None:
+        """#214: legacy callers (no public_key) produce backward-compat payload.
+
+        Receivers must see the field MISSING, not null — they branch on
+        ``isinstance(payload.get("public_key"), str) and payload["public_key"]``.
+        A null-emitted field would skip the fetch fallback and break dispatch.
+        """
+        private_key = Ed25519PrivateKey.generate()
+        envelope = build_broadcast_envelope(
+            swarm_id=SWARM_ID,
+            master_id=MASTER_ID,
+            master_endpoint=MASTER_ENDPOINT,
+            master_private_key=private_key,
+            new_agent_id=NEW_AGENT_ID,
+            new_agent_endpoint=NEW_AGENT_ENDPOINT,
+            joined_at=datetime(2026, 5, 9, 9, 11, 59, tzinfo=timezone.utc),
+            # new_agent_public_key intentionally omitted
+        )
+        content = json.loads(envelope["content"])
+        assert "public_key" not in content
+
     def test_envelope_has_signature(self) -> None:
         """Signature field is non-empty base64 — receiver MAY verify."""
         private_key = Ed25519PrivateKey.generate()

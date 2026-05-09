@@ -5,15 +5,26 @@ or member_kicked, the local swarm_members table must be updated so direct A2A
 sends can route. Without this dispatch, members can only reach a newly-joined
 agent via broadcast — direct sends fail silently on the sender side.
 
-Path 1b from issue #197: lazy-fetch /swarm/info on the new member's endpoint
-to retrieve the public_key, pull swarm_id from the message envelope, and
-INSERT OR IGNORE into swarm_members. INSERT OR REPLACE into public_keys to
-pre-warm the verification cache. Symmetric DELETE for member_left/member_kicked
-on swarm_members only — public_keys cache survives churn.
+#214 path (preferred): the broadcast payload carries the new member's
+``public_key`` inline. Receivers INSERT OR IGNORE into ``swarm_members`` and
+INSERT OR REPLACE into ``public_keys`` directly — no network call required.
+This is the master-authoritative path: the master just stored the new member
+via ``add_member`` and forwards the same key in the broadcast.
 
-Network failures fetching /swarm/info are logged and swallowed: the message
-must remain accepted, and the lazy-fetch fallback in the signature verifier
-will populate public_keys on first inbound message from the new member.
+#197 fallback path: when the broadcast omits ``public_key`` (legacy master,
+pre-#214 build), lazy-fetch ``/swarm/info`` on the new member's endpoint to
+retrieve the key. This path is brittle — a single transient HTTPS failure
+permanently desynchronizes the receiver — and is the failure mode #214 was
+filed against. Kept here only for backward compatibility with old masters.
+
+Symmetric DELETE for member_left/member_kicked on ``swarm_members`` only —
+the ``public_keys`` cache survives churn so signature verification of any
+in-flight messages from the removed agent still works.
+
+Failures (broadcast omitted public_key AND /swarm/info fetch failed) are
+logged and swallowed: the message must remain accepted regardless of the
+dispatch outcome. Operator can manually unblock via the SQL-INSERT pattern
+documented on issue #214.
 """
 from __future__ import annotations
 
@@ -251,21 +262,41 @@ async def dispatch_system_message(
                 # proxy for "when the receiver became aware of the join".
                 joined_at_iso = body.timestamp
 
-            public_key = await _fetch_public_key(
-                new_endpoint, target_agent_id, local_agent_id,
-            )
-            if public_key is None:
-                # Fail loud (logged), continue silently. The lazy-fetch
-                # in the signature verifier will populate public_keys on
-                # the first inbound message from the new member, and a
-                # subsequent member_joined retry — or a manual swarm
-                # refresh — can complete the swarm_members write later.
-                logger.warning(
-                    "Skipping swarm_members insert for '%s': public_key "
-                    "fetch failed; lazy-fetch will retry on first verify",
+            # #214: prefer the public_key carried inline in the broadcast
+            # payload over fetching /swarm/info. The master always knows
+            # the new member's key (it just stored the row), so when the
+            # broadcast carries it, no network call is needed and the
+            # fetch race that originally caused #214 disappears.
+            #
+            # Backward compatibility: if the payload omits public_key
+            # (legacy master, pre-#214 build), fall back to the existing
+            # /swarm/info fetch path. The fetch is still brittle in that
+            # window, but no worse than before this PR.
+            inline_public_key = payload.get("public_key")
+            if isinstance(inline_public_key, str) and inline_public_key:
+                public_key: Optional[str] = inline_public_key
+                logger.info(
+                    "Using inline public_key from broadcast payload for "
+                    "'%s' (no /swarm/info fetch needed)",
                     target_agent_id,
                 )
-                return
+            else:
+                public_key = await _fetch_public_key(
+                    new_endpoint, target_agent_id, local_agent_id,
+                )
+                if public_key is None:
+                    # Fail loud (logged), continue silently. Without the
+                    # inline key (legacy broadcast) and a working fetch,
+                    # the receiver cannot satisfy swarm_members.public_key
+                    # NOT NULL. Operator can manually unblock via
+                    # SQL-INSERT (see #214 troubleshooting comment).
+                    logger.warning(
+                        "Skipping swarm_members insert for '%s': "
+                        "broadcast omitted public_key AND /swarm/info "
+                        "fetch failed. See #214 for SQL-unblock pattern.",
+                        target_agent_id,
+                    )
+                    return
 
             await _handle_member_joined(
                 db=db,

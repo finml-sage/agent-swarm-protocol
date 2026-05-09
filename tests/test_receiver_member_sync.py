@@ -236,6 +236,144 @@ class TestMemberJoinedReceiverDispatch:
         assert keys[0]["endpoint"] == NEW_AGENT_ENDPOINT
         assert keys[0]["fetched_at"]  # any non-empty ISO timestamp
 
+    def test_inline_public_key_skips_fetch_and_inserts(
+        self, tmp_path: Path,
+    ) -> None:
+        """#214: when broadcast carries public_key inline, no /swarm/info fetch.
+
+        The master always knows the new member's public_key (it just
+        stored the row via add_member). Carrying the key in the
+        broadcast eliminates the receiver-side fetch, which is the
+        brittle path that caused #214 — a single transient HTTPS failure
+        permanently desynchronizes the receiver. With the inline key,
+        even an unreachable /swarm/info endpoint cannot break dispatch.
+        """
+        db_path = tmp_path / "inline.db"
+        _seed_swarm(db_path)
+        config = _make_config(db_path)
+
+        with patch(
+            "src.server.system_dispatch.httpx.AsyncClient",
+        ) as mock_client_factory:
+            # If the dispatcher tries to use httpx at all, the test
+            # fails — the inline path must NOT call the network.
+            mock_instance = AsyncMock()
+            mock_instance.__aenter__.return_value = mock_instance
+            mock_instance.__aexit__.return_value = None
+            mock_instance.get = AsyncMock(
+                side_effect=AssertionError(
+                    "/swarm/info must NOT be fetched when "
+                    "public_key is inline (#214)",
+                ),
+            )
+            mock_client_factory.return_value = mock_instance
+
+            with TestClient(create_app(config)) as client:
+                msg = _system_message(
+                    action="member_joined",
+                    target_agent_id=NEW_AGENT_ID,
+                    sender_endpoint=NEW_AGENT_ENDPOINT,
+                    extra_content={
+                        "endpoint": NEW_AGENT_ENDPOINT,
+                        "joined_at": "2026-05-09T09:11:59.885Z",
+                        "public_key": NEW_AGENT_PUBKEY,
+                    },
+                )
+                response = client.post(
+                    "/swarm/message",
+                    json=msg,
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-Agent-ID": MASTER_AGENT_ID,
+                        "X-Swarm-Protocol": "0.1.0",
+                    },
+                )
+                assert response.status_code == 200
+                assert response.json()["status"] == "queued"
+
+            # The /swarm/info endpoint MUST NOT have been called.
+            mock_instance.get.assert_not_called()
+
+        # 5 NOT NULL columns populated from the inline payload alone.
+        members = _read_table(
+            db_path, "swarm_members",
+            where=f"agent_id = '{NEW_AGENT_ID}' AND swarm_id = '{SWARM_ID}'",
+        )
+        assert len(members) == 1
+        row = members[0]
+        assert row["agent_id"] == NEW_AGENT_ID
+        assert row["swarm_id"] == SWARM_ID
+        assert row["endpoint"] == NEW_AGENT_ENDPOINT
+        assert row["public_key"] == NEW_AGENT_PUBKEY
+        assert row["joined_at"] == "2026-05-09T09:11:59.885Z"
+
+        # public_keys cache pre-warmed.
+        keys = _read_table(
+            db_path, "public_keys", where=f"agent_id = '{NEW_AGENT_ID}'",
+        )
+        assert len(keys) == 1
+        assert keys[0]["public_key"] == NEW_AGENT_PUBKEY
+        assert keys[0]["endpoint"] == NEW_AGENT_ENDPOINT
+
+    def test_inline_public_key_survives_unreachable_swarm_info(
+        self, tmp_path: Path,
+    ) -> None:
+        """#214 regression: original failure mode no longer applies when key is inline.
+
+        Reproduces the live-incident shape: receiver gets the broadcast
+        moments after the new agent's CF A-record landed, /swarm/info on
+        the new agent is unreachable. With the legacy payload (#197 path)
+        the insert was skipped — see test_swarm_info_unreachable_does_not_crash.
+        With the inline public_key (#214 path), the insert succeeds even
+        though the network would have failed.
+        """
+        import httpx
+
+        db_path = tmp_path / "inline_recovers.db"
+        _seed_swarm(db_path)
+        config = _make_config(db_path)
+
+        with patch(
+            "src.server.system_dispatch.httpx.AsyncClient",
+        ) as mock_client_factory:
+            mock_instance = AsyncMock()
+            mock_instance.__aenter__.return_value = mock_instance
+            mock_instance.__aexit__.return_value = None
+            # If for any reason the dispatcher DOES try to fetch, it fails.
+            mock_instance.get = AsyncMock(
+                side_effect=httpx.ConnectError("connection refused"),
+            )
+            mock_client_factory.return_value = mock_instance
+            with TestClient(create_app(config)) as client:
+                msg = _system_message(
+                    action="member_joined",
+                    target_agent_id=NEW_AGENT_ID,
+                    sender_endpoint=NEW_AGENT_ENDPOINT,
+                    extra_content={
+                        "endpoint": NEW_AGENT_ENDPOINT,
+                        "joined_at": "2026-05-09T09:11:59.885Z",
+                        "public_key": NEW_AGENT_PUBKEY,
+                    },
+                )
+                response = client.post(
+                    "/swarm/message",
+                    json=msg,
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-Agent-ID": MASTER_AGENT_ID,
+                        "X-Swarm-Protocol": "0.1.0",
+                    },
+                )
+                assert response.status_code == 200
+
+        # The row MUST be present despite /swarm/info being unreachable.
+        members = _read_table(
+            db_path, "swarm_members",
+            where=f"agent_id = '{NEW_AGENT_ID}'",
+        )
+        assert len(members) == 1
+        assert members[0]["public_key"] == NEW_AGENT_PUBKEY
+
     def test_swarm_info_unreachable_does_not_crash(
         self, tmp_path: Path,
     ) -> None:
