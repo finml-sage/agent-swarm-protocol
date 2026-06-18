@@ -56,7 +56,7 @@ curl -fsSL https://angie.software/keys/angie-signing.gpg | \
     gpg --dearmor -o /usr/share/keyrings/angie-archive-keyring.gpg
 
 echo "deb [signed-by=/usr/share/keyrings/angie-archive-keyring.gpg] \
-    https://download.angie.software/angie/$(. /etc/os-release && echo $ID)/ \
+    https://download.angie.software/angie/$(. /etc/os-release && echo $ID)/$(. /etc/os-release && echo $VERSION_ID) \
     $(. /etc/os-release && echo $VERSION_CODENAME) main" | \
     sudo tee /etc/apt/sources.list.d/angie.list
 
