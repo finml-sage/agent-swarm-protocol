@@ -54,17 +54,19 @@ invokes the agent. This endpoint is conditionally mounted; set
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `WAKE_EP_ENABLED` | No | `true` | Mount the `/api/wake` endpoint. Accepts `1`, `true`, or `yes`. |
-| `WAKE_EP_INVOKE_METHOD` | No | `noop` | Agent invocation strategy: `tmux` or `noop` |
+| `WAKE_EP_INVOKE_METHOD` | No | `noop` | Agent invocation strategy: `tmux`, `zellij`, or `noop` |
 | `WAKE_EP_SECRET` | No | (empty) | Shared secret for `X-Wake-Secret` header authentication. Empty disables auth. |
 | `WAKE_EP_SESSION_FILE` | No | `/root/.swarm/session.json` | Path to session state file for invocation deduplication |
 | `WAKE_EP_SESSION_TIMEOUT` | No | `30` | Minutes before an active session is considered expired |
 | `WAKE_EP_TMUX_TARGET` | When method is `tmux` | - | Tmux session/window/pane target (e.g., `main:0`) |
+| `WAKE_EP_ZELLIJ_SESSION` | When method is `zellij` | - | Zellij session name (e.g., `codex`) |
 
 ### Invoke Methods
 
 | Method | Configuration | Behavior |
 |--------|---------------|----------|
 | `tmux` | `WAKE_EP_TMUX_TARGET` (required) | Sends notification into a running tmux session via `tmux send-keys`. |
+| `zellij` | `WAKE_EP_ZELLIJ_SESSION` (required) | Sends notification into a running zellij session via `zellij action write-chars`. |
 | `noop` | Not required | Does nothing. Useful for testing or dry-run. |
 
 ## Validation Rules
@@ -74,6 +76,7 @@ The server enforces these validation rules at startup:
 1. `AGENT_ID`, `AGENT_ENDPOINT`, and `AGENT_PUBLIC_KEY` are **always required**.
    The server will refuse to start without them.
 2. If `WAKE_EP_INVOKE_METHOD` is `tmux`, `WAKE_EP_TMUX_TARGET` is required.
+3. If `WAKE_EP_INVOKE_METHOD` is `zellij`, `WAKE_EP_ZELLIJ_SESSION` is required.
 
 ## Quick Start
 

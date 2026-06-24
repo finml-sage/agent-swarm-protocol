@@ -1,21 +1,24 @@
 """Tests for wake trigger."""
-import pytest
+
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
-from src.state import DatabaseManager
-from src.state.models.inbox import InboxMessage, InboxStatus
-from src.claude.wake_trigger import (
-    WakeTrigger,
-    WakeDecision,
-    WakeEvent,
-    WakeTriggerError,
-)
+
+import pytest
+
 from src.claude.notification_preferences import (
-    NotificationPreferences,
     NotificationLevel,
+    NotificationPreferences,
     WakeCondition,
 )
+from src.claude.wake_trigger import (
+    WakeDecision,
+    WakeEvent,
+    WakeTrigger,
+    WakeTriggerError,
+)
+from src.state import DatabaseManager
+from src.state.models.inbox import InboxMessage, InboxStatus
 
 
 class TestWakeTrigger:
@@ -53,9 +56,7 @@ class TestWakeTrigger:
         """Uninitialized database should raise error."""
         db = DatabaseManager(tmp_path / "test.db")
         with pytest.raises(WakeTriggerError, match="Database not initialized"):
-            WakeTrigger(
-                db, "http://localhost:8080/api/wake", NotificationPreferences()
-            )
+            WakeTrigger(db, "http://localhost:8080/api/wake", NotificationPreferences())
 
     def test_empty_endpoint_raises(self, db_manager: DatabaseManager) -> None:
         """Empty wake endpoint should raise error."""
@@ -74,9 +75,7 @@ class TestWakeTrigger:
             mock_instance = AsyncMock()
             mock_instance.__aenter__.return_value = mock_instance
             mock_instance.__aexit__.return_value = None
-            mock_instance.post.return_value = AsyncMock(
-                status_code=200, text=""
-            )
+            mock_instance.post.return_value = AsyncMock(status_code=200, text="")
             mock_client.return_value = mock_instance
 
             trigger = WakeTrigger(
@@ -140,9 +139,7 @@ class TestWakeTrigger:
         prefs = NotificationPreferences(
             enabled=False,  # Disabled returns SILENT
         )
-        trigger = WakeTrigger(
-            db_manager, "http://localhost:8080/api/wake", prefs
-        )
+        trigger = WakeTrigger(db_manager, "http://localhost:8080/api/wake", prefs)
         event = await trigger.process_message(sample_message)
 
         assert event.decision == WakeDecision.QUEUE
@@ -203,6 +200,35 @@ class TestWakeTrigger:
             call_args = mock_instance.post.call_args
             assert call_args[0][0] == "http://localhost:8080/api/wake"
             assert "message_id" in call_args[1]["json"]
+            assert call_args[1]["headers"] == {}
+
+    @pytest.mark.asyncio
+    async def test_wake_posts_secret_header_when_configured(
+        self,
+        db_manager: DatabaseManager,
+        sample_message: InboxMessage,
+        default_prefs: NotificationPreferences,
+    ) -> None:
+        """WAKE POST should include X-Wake-Secret when configured."""
+        with patch("src.claude.wake_trigger.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.__aenter__.return_value = mock_instance
+            mock_instance.__aexit__.return_value = None
+            mock_response = AsyncMock()
+            mock_response.status_code = 200
+            mock_instance.post.return_value = mock_response
+            mock_client.return_value = mock_instance
+
+            trigger = WakeTrigger(
+                db_manager,
+                "http://localhost:8080/api/wake",
+                default_prefs,
+                wake_secret="test-secret",
+            )
+            await trigger.process_message(sample_message)
+
+            call_args = mock_instance.post.call_args
+            assert call_args[1]["headers"] == {"X-Wake-Secret": "test-secret"}
 
     @pytest.mark.asyncio
     async def test_wake_endpoint_error_raises(
