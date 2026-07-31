@@ -1,14 +1,19 @@
 """Pytest fixtures for server tests."""
 import base64
 import json
-import pytest
 from pathlib import Path
-from tempfile import TemporaryDirectory
+
+import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi.testclient import TestClient
+
 from src.server.app import create_app
 from src.server.config import (
-    ServerConfig, AgentConfig, RateLimitConfig, WakeConfig, WakeEndpointConfig,
+    AgentConfig,
+    RateLimitConfig,
+    ServerConfig,
+    WakeConfig,
+    WakeEndpointConfig,
 )
 
 
@@ -51,6 +56,23 @@ def client(server_config: ServerConfig) -> TestClient:
     app = create_app(server_config)
     with TestClient(app) as c:
         yield c
+
+
+@pytest.fixture
+def bypass_message_auth(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isolate existing route-behavior tests from message authentication.
+
+    Cryptographic authentication is exercised end-to-end in
+    ``test_message_auth.py``. Persistence, dispatch, wake, and rate-limit tests
+    use this fixture so their setup remains focused on the behavior under test.
+    """
+    async def _allow_message(*args, **kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "src.server.routes.message.authenticate_message",
+        _allow_message,
+    )
 
 
 @pytest.fixture
