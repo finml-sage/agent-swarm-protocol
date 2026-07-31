@@ -1,15 +1,14 @@
 """Server configuration."""
+
 import logging
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
-import os
 
 logger = logging.getLogger(__name__)
 
-_RECOGNISED_BOOL_VALUES = frozenset(
-    ("1", "true", "yes", "0", "false", "no")
-)
+_RECOGNISED_BOOL_VALUES = frozenset(("1", "true", "yes", "0", "false", "no"))
 
 
 @dataclass(frozen=True)
@@ -31,6 +30,14 @@ class AgentConfig:
 @dataclass(frozen=True)
 class RateLimitConfig:
     messages_per_minute: int = 60
+
+
+@dataclass(frozen=True)
+class ManagementApiConfig:
+    """Private inbox/outbox management API configuration."""
+
+    enabled: bool = False
+    token: str = ""
 
 
 @dataclass(frozen=True)
@@ -76,6 +83,7 @@ class WakeEndpointConfig:
 class ServerConfig:
     agent: AgentConfig
     rate_limit: RateLimitConfig = field(default_factory=RateLimitConfig)
+    management_api: ManagementApiConfig = field(default_factory=ManagementApiConfig)
     db_path: Path = field(default_factory=lambda: Path("data/swarm.db"))
     wake: WakeConfig = field(default_factory=WakeConfig)
     wake_endpoint: WakeEndpointConfig = field(default_factory=WakeEndpointConfig)
@@ -117,6 +125,15 @@ def load_config_from_env() -> ServerConfig:
     if missing:
         raise ValueError(f"Missing: {', '.join(missing)}")
 
+    management_api_enabled = _parse_bool(
+        os.environ.get("MANAGEMENT_API_ENABLED", ""), default=False
+    )
+    management_api_token = os.environ.get("MANAGEMENT_API_TOKEN", "")
+    if management_api_enabled and not management_api_token:
+        raise ValueError(
+            "MANAGEMENT_API_TOKEN required when MANAGEMENT_API_ENABLED is set"
+        )
+
     wake_enabled = _parse_bool(os.environ.get("WAKE_ENABLED", ""), default=True)
     wake_endpoint_url = os.environ.get(
         "WAKE_ENDPOINT", "http://localhost:8080/api/wake"
@@ -124,9 +141,7 @@ def load_config_from_env() -> ServerConfig:
     if wake_enabled and not wake_endpoint_url:
         raise ValueError("WAKE_ENDPOINT required when WAKE_ENABLED is set")
 
-    wake_ep_enabled = _parse_bool(
-        os.environ.get("WAKE_EP_ENABLED", ""), default=True
-    )
+    wake_ep_enabled = _parse_bool(os.environ.get("WAKE_EP_ENABLED", ""), default=True)
     wake_ep_secret = os.environ.get("WAKE_EP_SECRET", "")
     if wake_ep_enabled and not wake_ep_secret:
         logger.warning(
@@ -164,7 +179,13 @@ def load_config_from_env() -> ServerConfig:
             private_key_path=private_key_path,
         ),
         rate_limit=RateLimitConfig(
-            messages_per_minute=int(os.environ.get("RATE_LIMIT_MESSAGES_PER_MINUTE", "60")),
+            messages_per_minute=int(
+                os.environ.get("RATE_LIMIT_MESSAGES_PER_MINUTE", "60")
+            ),
+        ),
+        management_api=ManagementApiConfig(
+            enabled=management_api_enabled,
+            token=management_api_token,
         ),
         db_path=Path(os.environ.get("DB_PATH", "data/swarm.db")),
         wake=WakeConfig(

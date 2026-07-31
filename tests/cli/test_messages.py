@@ -12,8 +12,8 @@ from unittest.mock import AsyncMock, patch
 import toon
 from typer.testing import CliRunner
 
+from src.cli.commands.messages import _management_headers, _server_base_url
 from src.cli.main import app
-from src.cli.commands.messages import _server_base_url
 from src.cli.utils.config import ConfigManager
 
 runner = CliRunner()
@@ -40,12 +40,14 @@ def _init_agent(monkeypatch, config_dir: Path) -> None:
 
 def _sample_message(status: str = "unread") -> dict:
     """Return a sample inbox message dict with TOON content_preview."""
-    toon_content = toon.encode({
-        "sender": {"agent_id": "sender-agent"},
-        "recipient": "test-agent",
-        "type": "chat",
-        "content": "Hello from test",
-    })
+    toon_content = toon.encode(
+        {
+            "sender": {"agent_id": "sender-agent"},
+            "recipient": "test-agent",
+            "type": "chat",
+            "content": "Hello from test",
+        }
+    )
     return {
         "message_id": MSG_ID,
         "swarm_id": SWARM_ID,
@@ -66,16 +68,37 @@ class TestServerBaseUrl:
     """Unit tests for the URL derivation helper."""
 
     def test_strips_swarm_path(self):
-        assert _server_base_url("https://host.example.com/swarm") == "https://host.example.com"
+        assert (
+            _server_base_url("https://host.example.com/swarm")
+            == "https://host.example.com"
+        )
 
     def test_strips_trailing_slash(self):
-        assert _server_base_url("https://host.example.com/swarm/") == "https://host.example.com"
+        assert (
+            _server_base_url("https://host.example.com/swarm/")
+            == "https://host.example.com"
+        )
 
     def test_preserves_port(self):
-        assert _server_base_url("http://localhost:8081/swarm") == "http://localhost:8081"
+        assert (
+            _server_base_url("http://localhost:8081/swarm") == "http://localhost:8081"
+        )
 
     def test_no_path(self):
-        assert _server_base_url("https://host.example.com") == "https://host.example.com"
+        assert (
+            _server_base_url("https://host.example.com") == "https://host.example.com"
+        )
+
+
+def test_management_headers_use_local_token(monkeypatch):
+    """Private API calls carry the locally stored Bearer token."""
+    monkeypatch.setattr(
+        ConfigManager,
+        "load_management_token",
+        lambda self: "test-token",
+    )
+
+    assert _management_headers() == {"Authorization": "Bearer test-token"}
 
 
 # ---------------------------------------------------------------------------
@@ -132,7 +155,9 @@ class TestMessagesValidation:
                 result = runner.invoke(
                     app, ["messages", "-s", SWARM_ID, "--status", old_status]
                 )
-                assert result.exit_code == 2, f"Status '{old_status}' should be rejected"
+                assert result.exit_code == 2, (
+                    f"Status '{old_status}' should be rejected"
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -234,7 +259,9 @@ class TestMessagesList:
     @patch("src.cli.commands.messages._batch_mark_read", new_callable=AsyncMock)
     @patch("src.cli.commands.messages._fetch_inbox", new_callable=AsyncMock)
     @patch("src.cli.commands.messages._load_base_url", return_value=BASE_URL)
-    def test_list_no_mark_read_flag(self, mock_url, mock_fetch, mock_batch, monkeypatch):
+    def test_list_no_mark_read_flag(
+        self, mock_url, mock_fetch, mock_batch, monkeypatch
+    ):
         """--no-mark-read prevents auto-marking."""
         mock_fetch.return_value = {"count": 1, "messages": [_sample_message()]}
 
@@ -242,9 +269,7 @@ class TestMessagesList:
             config_dir = Path(tmpdir) / "swarm"
             _init_agent(monkeypatch, config_dir)
 
-            result = runner.invoke(
-                app, ["messages", "-s", SWARM_ID, "--no-mark-read"]
-            )
+            result = runner.invoke(app, ["messages", "-s", SWARM_ID, "--no-mark-read"])
 
         assert result.exit_code == 0
         mock_batch.assert_not_called()
@@ -252,7 +277,9 @@ class TestMessagesList:
     @patch("src.cli.commands.messages._batch_mark_read", new_callable=AsyncMock)
     @patch("src.cli.commands.messages._fetch_inbox", new_callable=AsyncMock)
     @patch("src.cli.commands.messages._load_base_url", return_value=BASE_URL)
-    def test_list_read_status_no_automark(self, mock_url, mock_fetch, mock_batch, monkeypatch):
+    def test_list_read_status_no_automark(
+        self, mock_url, mock_fetch, mock_batch, monkeypatch
+    ):
         """Listing read messages does not trigger auto-mark."""
         mock_fetch.return_value = {"count": 1, "messages": [_sample_message("read")]}
 
@@ -270,7 +297,9 @@ class TestMessagesList:
     @patch("src.cli.commands.messages._batch_mark_read", new_callable=AsyncMock)
     @patch("src.cli.commands.messages._fetch_inbox", new_callable=AsyncMock)
     @patch("src.cli.commands.messages._load_base_url", return_value=BASE_URL)
-    def test_list_all_status_no_automark(self, mock_url, mock_fetch, mock_batch, monkeypatch):
+    def test_list_all_status_no_automark(
+        self, mock_url, mock_fetch, mock_batch, monkeypatch
+    ):
         """Listing with --status all does not trigger auto-mark."""
         mock_fetch.return_value = {"count": 1, "messages": [_sample_message()]}
 
@@ -278,9 +307,7 @@ class TestMessagesList:
             config_dir = Path(tmpdir) / "swarm"
             _init_agent(monkeypatch, config_dir)
 
-            result = runner.invoke(
-                app, ["messages", "-s", SWARM_ID, "--status", "all"]
-            )
+            result = runner.invoke(app, ["messages", "-s", SWARM_ID, "--status", "all"])
 
         assert result.exit_code == 0
         mock_batch.assert_not_called()
@@ -307,7 +334,9 @@ class TestMessagesList:
     @patch("src.cli.commands.messages._batch_mark_read", new_callable=AsyncMock)
     @patch("src.cli.commands.messages._fetch_inbox", new_callable=AsyncMock)
     @patch("src.cli.commands.messages._load_base_url", return_value=BASE_URL)
-    def test_list_json_flag_ignored(self, mock_url, mock_fetch, mock_batch, monkeypatch):
+    def test_list_json_flag_ignored(
+        self, mock_url, mock_fetch, mock_batch, monkeypatch
+    ):
         """--json flag in list mode still produces TOON output (JSON only for --count)."""
         mock_fetch.return_value = {"count": 1, "messages": [_sample_message()]}
         mock_batch.return_value = {"action": "read", "updated": 1, "total": 1}
@@ -317,7 +346,8 @@ class TestMessagesList:
             _init_agent(monkeypatch, config_dir)
 
             result = runner.invoke(
-                app, ["messages", "-s", SWARM_ID, "--json"],
+                app,
+                ["messages", "-s", SWARM_ID, "--json"],
             )
 
         assert result.exit_code == 0
@@ -339,7 +369,11 @@ class TestMessagesCount:
     def test_count_display(self, mock_url, mock_count, monkeypatch):
         """Count mode shows unread, read, and total."""
         mock_count.return_value = {
-            "unread": 5, "read": 2, "archived": 0, "deleted": 0, "total": 7,
+            "unread": 5,
+            "read": 2,
+            "archived": 0,
+            "deleted": 0,
+            "total": 7,
         }
 
         with TemporaryDirectory() as tmpdir:
@@ -357,7 +391,11 @@ class TestMessagesCount:
     def test_count_json(self, mock_url, mock_count, monkeypatch):
         """Count mode with --json outputs valid JSON."""
         mock_count.return_value = {
-            "unread": 3, "read": 1, "archived": 0, "deleted": 0, "total": 4,
+            "unread": 3,
+            "read": 1,
+            "archived": 0,
+            "deleted": 0,
+            "total": 4,
         }
 
         with TemporaryDirectory() as tmpdir:
@@ -506,16 +544,30 @@ class TestMessagesArchiveAll:
     @patch("src.cli.commands.messages._fetch_inbox", new_callable=AsyncMock)
     @patch("src.cli.commands.messages._load_base_url", return_value=BASE_URL)
     def test_archive_all_success(
-        self, mock_url, mock_fetch, mock_batch, monkeypatch,
+        self,
+        mock_url,
+        mock_fetch,
+        mock_batch,
+        monkeypatch,
     ):
         """--archive-all archives read messages."""
         mock_fetch.return_value = {
             "count": 2,
             "messages": [
-                {"message_id": "msg-1", "sender_id": "a", "status": "read",
-                 "received_at": "2026-02-09T12:00:00", "content_preview": "hi"},
-                {"message_id": "msg-2", "sender_id": "b", "status": "read",
-                 "received_at": "2026-02-09T12:01:00", "content_preview": "yo"},
+                {
+                    "message_id": "msg-1",
+                    "sender_id": "a",
+                    "status": "read",
+                    "received_at": "2026-02-09T12:00:00",
+                    "content_preview": "hi",
+                },
+                {
+                    "message_id": "msg-2",
+                    "sender_id": "b",
+                    "status": "read",
+                    "received_at": "2026-02-09T12:01:00",
+                    "content_preview": "yo",
+                },
             ],
         }
         mock_batch.return_value = {"action": "archive", "updated": 2, "total": 2}
@@ -524,9 +576,7 @@ class TestMessagesArchiveAll:
             config_dir = Path(tmpdir) / "swarm"
             _init_agent(monkeypatch, config_dir)
 
-            result = runner.invoke(
-                app, ["messages", "--archive-all", "-s", SWARM_ID]
-            )
+            result = runner.invoke(app, ["messages", "--archive-all", "-s", SWARM_ID])
 
         assert result.exit_code == 0
         assert "Archived 2 of 2" in result.stdout
@@ -538,7 +588,10 @@ class TestMessagesArchiveAll:
     @patch("src.cli.commands.messages._fetch_inbox", new_callable=AsyncMock)
     @patch("src.cli.commands.messages._load_base_url", return_value=BASE_URL)
     def test_archive_all_no_read_messages(
-        self, mock_url, mock_fetch, monkeypatch,
+        self,
+        mock_url,
+        mock_fetch,
+        monkeypatch,
     ):
         """--archive-all with no read messages shows info."""
         mock_fetch.return_value = {"count": 0, "messages": []}
@@ -547,9 +600,7 @@ class TestMessagesArchiveAll:
             config_dir = Path(tmpdir) / "swarm"
             _init_agent(monkeypatch, config_dir)
 
-            result = runner.invoke(
-                app, ["messages", "--archive-all", "-s", SWARM_ID]
-            )
+            result = runner.invoke(app, ["messages", "--archive-all", "-s", SWARM_ID])
 
         assert result.exit_code == 0
         assert "No read messages to archive" in result.stdout
@@ -558,14 +609,23 @@ class TestMessagesArchiveAll:
     @patch("src.cli.commands.messages._fetch_inbox", new_callable=AsyncMock)
     @patch("src.cli.commands.messages._load_base_url", return_value=BASE_URL)
     def test_archive_all_json(
-        self, mock_url, mock_fetch, mock_batch, monkeypatch,
+        self,
+        mock_url,
+        mock_fetch,
+        mock_batch,
+        monkeypatch,
     ):
         """--archive-all --json outputs batch response."""
         mock_fetch.return_value = {
             "count": 1,
             "messages": [
-                {"message_id": "msg-1", "sender_id": "a", "status": "read",
-                 "received_at": "2026-02-09T12:00:00", "content_preview": "hi"},
+                {
+                    "message_id": "msg-1",
+                    "sender_id": "a",
+                    "status": "read",
+                    "received_at": "2026-02-09T12:00:00",
+                    "content_preview": "hi",
+                },
             ],
         }
         mock_batch.return_value = {"action": "archive", "updated": 1, "total": 1}
@@ -586,7 +646,10 @@ class TestMessagesArchiveAll:
     @patch("src.cli.commands.messages._fetch_inbox", new_callable=AsyncMock)
     @patch("src.cli.commands.messages._load_base_url", return_value=BASE_URL)
     def test_archive_all_empty_json(
-        self, mock_url, mock_fetch, monkeypatch,
+        self,
+        mock_url,
+        mock_fetch,
+        monkeypatch,
     ):
         """--archive-all --json with no messages returns zero counts."""
         mock_fetch.return_value = {"count": 0, "messages": []}

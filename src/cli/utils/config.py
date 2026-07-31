@@ -35,12 +35,14 @@ class ConfigManager:
     CONFIG_FILE = "config.yaml"
     KEY_FILE = "agent.key"
     DB_FILE = "swarm.db"
+    MANAGEMENT_TOKEN_FILE = "management.token"
 
     def __init__(self, config_dir: Path | None = None) -> None:
         self._config_dir = config_dir or self.DEFAULT_DIR
         self._config_path = self._config_dir / self.CONFIG_FILE
         self._key_path = self._config_dir / self.KEY_FILE
         self._db_path = self._config_dir / self.DB_FILE
+        self._management_token_path = self._config_dir / self.MANAGEMENT_TOKEN_FILE
 
     @property
     def config_dir(self) -> Path:
@@ -53,6 +55,10 @@ class ConfigManager:
     @property
     def db_path(self) -> Path:
         return self._db_path
+
+    @property
+    def management_token_path(self) -> Path:
+        return self._management_token_path
 
     def exists(self) -> bool:
         """Check if configuration exists."""
@@ -94,12 +100,14 @@ class ConfigManager:
         self, agent_id: str, endpoint: str, private_key: Ed25519PrivateKey
     ) -> None:
         """Save configuration to file."""
-        self._config_dir.mkdir(parents=True, exist_ok=True)
+        self._config_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self._config_dir.chmod(0o700)
 
         config_data = {"agent_id": agent_id, "endpoint": endpoint}
 
         with open(self._config_path, "w") as f:
             yaml.safe_dump(config_data, f, default_flow_style=False)
+        self._config_path.chmod(0o600)
 
         key_bytes = private_key.private_bytes(
             Encoding.Raw, PrivateFormat.Raw, NoEncryption()
@@ -108,3 +116,16 @@ class ConfigManager:
             f.write(key_bytes)
 
         self._key_path.chmod(0o600)
+
+    def load_management_token(self) -> str:
+        """Load the private management API token from its owner-only file."""
+        if not self._management_token_path.exists():
+            raise ConfigError(
+                f"Management API token not configured at {self._management_token_path}"
+            )
+        token = self._management_token_path.read_text().strip()
+        if not token:
+            raise ConfigError(
+                f"Management API token is empty at {self._management_token_path}"
+            )
+        return token

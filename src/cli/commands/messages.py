@@ -19,7 +19,7 @@ from src.cli.output import (
     json_output,
     render_batch,
 )
-from src.cli.utils import ConfigManager, resolve_swarm_id, SwarmIdError
+from src.cli.utils import ConfigManager, SwarmIdError, resolve_swarm_id
 from src.cli.utils.config import ConfigError
 
 console = Console()
@@ -27,6 +27,12 @@ console = Console()
 _VALID_STATUSES = ("unread", "read", "archived", "all")
 
 _HTTP_TIMEOUT = 15.0
+
+
+def _management_headers() -> dict[str, str]:
+    """Build the private API Authorization header from local config."""
+    token = ConfigManager().load_management_token()
+    return {"Authorization": f"Bearer {token}"}
 
 
 def _server_base_url(endpoint: str) -> str:
@@ -43,7 +49,10 @@ def _server_base_url(endpoint: str) -> str:
 
 
 async def _fetch_inbox(
-    base_url: str, swarm_id: str, limit: int, status_filter: str,
+    base_url: str,
+    swarm_id: str,
+    limit: int,
+    status_filter: str,
 ) -> dict:
     """GET /api/inbox from the server."""
     params: dict[str, str | int] = {
@@ -51,7 +60,9 @@ async def _fetch_inbox(
         "status": status_filter,
         "limit": limit,
     }
-    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
+    async with httpx.AsyncClient(
+        timeout=_HTTP_TIMEOUT, headers=_management_headers()
+    ) as client:
         resp = await client.get(f"{base_url}/api/inbox", params=params)
         resp.raise_for_status()
         return resp.json()
@@ -60,7 +71,9 @@ async def _fetch_inbox(
 async def _fetch_count(base_url: str, swarm_id: str) -> dict:
     """GET /api/inbox/count from the server."""
     params = {"swarm_id": swarm_id}
-    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
+    async with httpx.AsyncClient(
+        timeout=_HTTP_TIMEOUT, headers=_management_headers()
+    ) as client:
         resp = await client.get(f"{base_url}/api/inbox/count", params=params)
         resp.raise_for_status()
         return resp.json()
@@ -69,17 +82,23 @@ async def _fetch_count(base_url: str, swarm_id: str) -> dict:
 async def _batch_mark_read(base_url: str, message_ids: list[str]) -> dict:
     """POST /api/inbox/batch to mark messages as read."""
     body = {"message_ids": message_ids, "action": "read"}
-    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
+    async with httpx.AsyncClient(
+        timeout=_HTTP_TIMEOUT, headers=_management_headers()
+    ) as client:
         resp = await client.post(f"{base_url}/api/inbox/batch", json=body)
         resp.raise_for_status()
         return resp.json()
 
 
 async def _batch_inbox_action(
-    base_url: str, message_ids: list[str], action: str,
+    base_url: str,
+    message_ids: list[str],
+    action: str,
 ) -> dict:
     """POST /api/inbox/batch on the server."""
-    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
+    async with httpx.AsyncClient(
+        timeout=_HTTP_TIMEOUT, headers=_management_headers()
+    ) as client:
         resp = await client.post(
             f"{base_url}/api/inbox/batch",
             json={"message_ids": message_ids, "action": action},
@@ -88,10 +107,11 @@ async def _batch_inbox_action(
         return resp.json()
 
 
-
 async def _archive_message(base_url: str, message_id: str) -> dict:
     """POST /api/inbox/{id}/archive."""
-    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
+    async with httpx.AsyncClient(
+        timeout=_HTTP_TIMEOUT, headers=_management_headers()
+    ) as client:
         resp = await client.post(f"{base_url}/api/inbox/{message_id}/archive")
         if resp.status_code in (200, 400, 404):
             return resp.json()
@@ -101,7 +121,9 @@ async def _archive_message(base_url: str, message_id: str) -> dict:
 
 async def _delete_message(base_url: str, message_id: str) -> dict:
     """POST /api/inbox/{id}/delete."""
-    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
+    async with httpx.AsyncClient(
+        timeout=_HTTP_TIMEOUT, headers=_management_headers()
+    ) as client:
         resp = await client.post(f"{base_url}/api/inbox/{message_id}/delete")
         if resp.status_code in (200, 404):
             return resp.json()
@@ -175,9 +197,9 @@ def _handle_delete(delete_id: str, json_flag: bool) -> None:
         format_success(console, f"Message {delete_id[:12]}... deleted")
 
 
-
 def _handle_archive_all(
-    swarm_id: str | None, json_flag: bool,
+    swarm_id: str | None,
+    json_flag: bool,
 ) -> None:
     """Archive all read messages in a swarm."""
     try:
@@ -218,9 +240,14 @@ def _handle_archive_all(
 
 
 def messages_command(
-    swarm_id: str | None, limit: int, status_filter: str,
-    archive: str | None, delete: str | None,
-    no_mark_read: bool, count: bool, json_flag: bool,
+    swarm_id: str | None,
+    limit: int,
+    status_filter: str,
+    archive: str | None,
+    delete: str | None,
+    no_mark_read: bool,
+    count: bool,
+    json_flag: bool,
     archive_all: bool = False,
 ) -> None:
     """List and manage messages via the server inbox API."""
@@ -254,7 +281,8 @@ def messages_command(
     # Validate status filter
     if status_filter not in _VALID_STATUSES:
         format_error(
-            console, f"Invalid status '{status_filter}'",
+            console,
+            f"Invalid status '{status_filter}'",
             hint=f"Valid values: {', '.join(_VALID_STATUSES)}",
         )
         raise typer.Exit(code=2)
@@ -283,13 +311,17 @@ def messages_command(
         if json_flag:
             json_output(console, {"swarm_id": sid, **data})
         else:
-            console.print(f"[cyan]Unread:[/cyan] {data['unread']}  "
-                          f"[dim]Read:[/dim] {data['read']}  "
-                          f"[dim]Total:[/dim] {data['total']}")
+            console.print(
+                f"[cyan]Unread:[/cyan] {data['unread']}  "
+                f"[dim]Read:[/dim] {data['read']}  "
+                f"[dim]Total:[/dim] {data['total']}"
+            )
         return
 
     # List mode
-    data = _run_async(_fetch_inbox(base_url, sid, limit, status_filter), "list messages")
+    data = _run_async(
+        _fetch_inbox(base_url, sid, limit, status_filter), "list messages"
+    )
     msgs = data.get("messages", [])
 
     # Auto-mark-read: after listing unread messages, mark them as read
