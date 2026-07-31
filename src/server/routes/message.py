@@ -1,4 +1,5 @@
 """POST /swarm/message endpoint handler."""
+
 import logging
 import sqlite3
 from datetime import datetime, timezone
@@ -6,14 +7,23 @@ from typing import Optional
 
 import toon
 from fastapi import APIRouter, Request, status
+from fastapi.responses import JSONResponse
 
+from src.claude.wake_trigger import WakeTrigger
+from src.server.message_auth import (
+    MessageAuthenticationError,
+    authenticate_message,
+)
 from src.server.models.requests import MessageRequest
-from src.server.models.responses import MessageQueuedResponse
+from src.server.models.responses import (
+    ErrorDetail,
+    ErrorResponse,
+    MessageQueuedResponse,
+)
 from src.server.system_dispatch import dispatch_system_message
 from src.state.database import DatabaseManager
 from src.state.models.inbox import InboxMessage, InboxStatus
 from src.state.repositories.inbox import InboxRepository
-from src.claude.wake_trigger import WakeTrigger
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +39,9 @@ def create_message_router(db: DatabaseManager, local_agent_id: str) -> APIRouter
         tags=["messages"],
     )
     async def receive_message(
-        request: Request, body: MessageRequest,
-    ) -> MessageQueuedResponse:
+        request: Request,
+        body: MessageRequest,
+    ) -> MessageQueuedResponse | JSONResponse:
         """Receive and persist a message from another agent.
 
         Idempotent: re-posting a message with the same message_id
@@ -39,27 +50,62 @@ def create_message_router(db: DatabaseManager, local_agent_id: str) -> APIRouter
         After persistence, the wake trigger (if configured) evaluates
         whether to WAKE, QUEUE, or SKIP the message.
         """
-        msg_dict = body.model_dump(exclude_none=True)
-        toon_content = toon.encode(msg_dict)
-
-        inbox_msg = InboxMessage(
-            message_id=body.message_id,
-            swarm_id=body.swarm_id,
-            sender_id=body.sender.agent_id,
-            recipient_id=body.recipient,
-            message_type=body.type,
-            content=toon_content,
-            received_at=datetime.now(timezone.utc),
-            status=InboxStatus.UNREAD,
-        )
         async with db.connection() as conn:
+            try:
+                await authenticate_message(
+                    conn,
+                    body,
+                    local_agent_id=local_agent_id,
+                    sender_header=request.headers.get("X-Agent-ID"),
+                    protocol_header=request.headers.get("X-Swarm-Protocol"),
+                )
+            except MessageAuthenticationError as exc:
+                log_method = logger.error if exc.status_code == 500 else logger.warning
+                log_method(
+                    "Message rejected: code=%s message=%s swarm=%s sender=%s reason=%s",
+                    exc.code,
+                    body.message_id,
+                    body.swarm_id,
+                    body.sender.agent_id,
+                    exc.reason,
+                )
+                error = ErrorResponse(
+                    error=ErrorDetail(
+                        code=exc.code,
+                        message="Inbound message authentication failed",
+                    )
+                )
+                return JSONResponse(
+                    status_code=exc.status_code,
+                    content=error.model_dump(),
+                )
+
+            msg_dict = body.model_dump(exclude_none=True)
+            toon_content = toon.encode(msg_dict)
+            inbox_msg = InboxMessage(
+                message_id=body.message_id,
+                swarm_id=body.swarm_id,
+                sender_id=body.sender.agent_id,
+                recipient_id=body.recipient,
+                message_type=body.type,
+                content=toon_content,
+                received_at=datetime.now(timezone.utc),
+                status=InboxStatus.UNREAD,
+            )
             repo = InboxRepository(conn)
             try:
                 await repo.insert(inbox_msg)
             except sqlite3.IntegrityError:
+                existing = await repo.get_by_id(body.message_id)
+                if existing is None:
+                    raise
                 logger.debug(
                     "Duplicate message %s ignored (idempotent)",
                     body.message_id,
+                )
+                return MessageQueuedResponse(
+                    status="queued",
+                    message_id=body.message_id,
                 )
 
         # Receiver-side membership lifecycle dispatch (issue #197). Fire
@@ -73,14 +119,17 @@ def create_message_router(db: DatabaseManager, local_agent_id: str) -> APIRouter
         except Exception as exc:
             logger.warning(
                 "System dispatch failed for message %s: %s",
-                body.message_id, exc,
+                body.message_id,
+                exc,
             )
 
         # Fire-and-forget wake trigger evaluation (non-blocking).
         # Catch all exceptions: wake is a side effect that must never
         # prevent message acceptance (e.g. httpx.ReadTimeout, WakeTriggerError).
         wake_trigger: Optional[WakeTrigger] = getattr(
-            request.app.state, "wake_trigger", None,
+            request.app.state,
+            "wake_trigger",
+            None,
         )
         if wake_trigger is not None:
             try:
@@ -99,7 +148,8 @@ def create_message_router(db: DatabaseManager, local_agent_id: str) -> APIRouter
                 )
 
         return MessageQueuedResponse(
-            status="queued", message_id=body.message_id,
+            status="queued",
+            message_id=body.message_id,
         )
 
     return router

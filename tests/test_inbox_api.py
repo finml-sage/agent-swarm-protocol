@@ -15,9 +15,11 @@ from src.server.app import create_app
 from src.server.config import AgentConfig, ServerConfig, WakeConfig, WakeEndpointConfig
 from src.state.database import DatabaseManager
 from src.state.models.inbox import InboxMessage, InboxStatus
-from src.state.models.outbox import OutboxMessage, OutboxStatus
+from src.state.models.outbox import OutboxMessage
 from src.state.repositories.inbox import InboxRepository
 from src.state.repositories.outbox import OutboxRepository
+
+pytestmark = pytest.mark.usefixtures("bypass_message_auth")
 
 SWARM_ID = "716a4150-ab9d-4b54-a2a8-f2b7c607c21e"
 MSG_1 = "aaa00000-0000-0000-0000-000000000001"
