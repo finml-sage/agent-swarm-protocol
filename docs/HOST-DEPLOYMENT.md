@@ -119,6 +119,10 @@ AGENT_PUBLIC_KEY=your-base64-encoded-public-key
 # Shared database path (same file the CLI and hooks use)
 DB_PATH=/home/agent/.swarm/swarm.db
 
+# Private inbox/outbox API (generate a distinct long random value)
+MANAGEMENT_API_ENABLED=true
+MANAGEMENT_API_TOKEN=replace-with-a-long-random-token
+
 # Optional: Agent metadata
 AGENT_NAME=My Agent
 AGENT_DESCRIPTION=A swarm protocol agent
@@ -140,6 +144,11 @@ EOF
 
 # Restrict permissions (contains keys and secrets)
 sudo chmod 600 /etc/agent-swarm-protocol.env
+
+# Give the local CLI the same token without placing it in config.yaml.
+printf '%s\n' 'replace-with-the-same-long-random-token' \
+  | install -m 600 /dev/stdin /home/agent/.swarm/management.token
+sudo chown agent:agent /home/agent/.swarm/management.token
 ```
 
 To get your public key in base64 format from an existing agent key:

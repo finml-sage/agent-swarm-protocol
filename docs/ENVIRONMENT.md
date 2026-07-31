@@ -28,6 +28,18 @@ Applied per-IP by the rate limiting middleware.
 |----------|----------|---------|-------------|
 | `DB_PATH` | No | `data/swarm.db` | Path to SQLite database for message persistence and swarm state |
 
+## Management API
+
+Inbox and outbox REST routes are private management surfaces and are disabled
+by default. When enabled, every `/api/inbox` and `/api/outbox` request requires
+`Authorization: Bearer <token>`. The CLI reads the same token from
+`~/.swarm/management.token`; keep that file owner-only (`0600`).
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `MANAGEMENT_API_ENABLED` | No | `false` | Mount the authenticated inbox/outbox REST routes. |
+| `MANAGEMENT_API_TOKEN` | When enabled | - | Long random Bearer token for the private management API. |
+
 ## Wake Trigger
 
 Controls the server-side wake trigger that evaluates incoming messages and
@@ -73,7 +85,8 @@ The server enforces these validation rules at startup:
 
 1. `AGENT_ID`, `AGENT_ENDPOINT`, and `AGENT_PUBLIC_KEY` are **always required**.
    The server will refuse to start without them.
-2. If `WAKE_EP_INVOKE_METHOD` is `tmux`, `WAKE_EP_TMUX_TARGET` is required.
+2. If `MANAGEMENT_API_ENABLED=true`, `MANAGEMENT_API_TOKEN` is required.
+3. If `WAKE_EP_INVOKE_METHOD` is `tmux`, `WAKE_EP_TMUX_TARGET` is required.
 
 ## Quick Start
 

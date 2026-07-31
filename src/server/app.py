@@ -1,4 +1,5 @@
 """FastAPI application factory."""
+
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -17,24 +18,25 @@ verify_package_integrity()
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
+
+from src.claude.notification_preferences import NotificationPreferences
+from src.claude.session_manager import SessionManager
+from src.claude.wake_trigger import WakeTrigger
 from src.server.config import ServerConfig, load_config_from_env
 from src.server.invoke_tmux import TmuxInvokeConfig
 from src.server.invoke_zellij import ZellijInvokeConfig
 from src.server.invoker import AgentInvoker
-from src.server.middleware.rate_limit import RateLimitMiddleware
 from src.server.middleware.logging import RequestLoggingMiddleware
-from src.server.models.responses import ErrorResponse, ErrorDetail
-from src.server.routes.message import create_message_router
-from src.server.routes.join import create_join_router
+from src.server.middleware.rate_limit import RateLimitMiddleware
+from src.server.models.responses import ErrorDetail, ErrorResponse
 from src.server.routes.health import create_health_router
-from src.server.routes.info import create_info_router
-from src.server.routes.wake import create_wake_router
 from src.server.routes.inbox import create_inbox_router
+from src.server.routes.info import create_info_router
+from src.server.routes.join import create_join_router
+from src.server.routes.message import create_message_router
 from src.server.routes.outbox import create_outbox_router
+from src.server.routes.wake import create_wake_router
 from src.state.database import DatabaseManager
-from src.claude.notification_preferences import NotificationPreferences
-from src.claude.session_manager import SessionManager
-from src.claude.wake_trigger import WakeTrigger
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +95,8 @@ def create_app(config: Optional[ServerConfig] = None) -> FastAPI:
         wake_trigger = _build_wake_trigger(config, db_manager)
         if wake_trigger is not None:
             logger.info(
-                "WakeTrigger active, endpoint=%s", config.wake.endpoint,
+                "WakeTrigger active, endpoint=%s",
+                config.wake.endpoint,
             )
         else:
             logger.info("WakeTrigger disabled")
@@ -109,14 +112,22 @@ def create_app(config: Optional[ServerConfig] = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.add_middleware(RequestLoggingMiddleware)
-    app.add_middleware(RateLimitMiddleware, requests_per_minute=config.rate_limit.messages_per_minute)
+    app.add_middleware(
+        RateLimitMiddleware, requests_per_minute=config.rate_limit.messages_per_minute
+    )
     app.add_exception_handler(ValidationError, _validation_error_handler)
     app.include_router(create_message_router(db_manager, config.agent.agent_id))
     app.include_router(create_join_router(config, db_manager))
     app.include_router(create_health_router(config))
     app.include_router(create_info_router(config))
-    app.include_router(create_inbox_router(db_manager))
-    app.include_router(create_outbox_router(db_manager))
+    if config.management_api.enabled:
+        app.include_router(create_inbox_router(db_manager, config.management_api.token))
+        app.include_router(
+            create_outbox_router(db_manager, config.management_api.token)
+        )
+        logger.info("Authenticated management API active")
+    else:
+        logger.info("Management API disabled")
 
     # Wire /api/wake endpoint when enabled
     if config.wake_endpoint.enabled:
@@ -135,7 +146,8 @@ def create_app(config: Optional[ServerConfig] = None) -> FastAPI:
             )
         )
         logger.info(
-            "Wake endpoint active, method=%s", config.wake_endpoint.invoke_method,
+            "Wake endpoint active, method=%s",
+            config.wake_endpoint.invoke_method,
         )
     else:
         logger.info("Wake endpoint disabled")
@@ -143,6 +155,14 @@ def create_app(config: Optional[ServerConfig] = None) -> FastAPI:
     return app
 
 
-async def _validation_error_handler(request: Request, exc: ValidationError) -> JSONResponse:
-    response = ErrorResponse(error=ErrorDetail(code="INVALID_FORMAT", message="Request validation failed", details={"validation_errors": exc.errors()}))
+async def _validation_error_handler(
+    request: Request, exc: ValidationError
+) -> JSONResponse:
+    response = ErrorResponse(
+        error=ErrorDetail(
+            code="INVALID_FORMAT",
+            message="Request validation failed",
+            details={"validation_errors": exc.errors()},
+        )
+    )
     return JSONResponse(status_code=400, content=response.model_dump())

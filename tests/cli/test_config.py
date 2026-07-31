@@ -1,8 +1,9 @@
 """Tests for CLI configuration management."""
 
-import pytest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+
+import pytest
 
 from src.cli.utils.config import AgentConfig, ConfigError, ConfigManager
 from src.client import generate_keypair
@@ -57,6 +58,35 @@ class TestConfigManager:
             key_path = config_dir / "agent.key"
             mode = key_path.stat().st_mode & 0o777
             assert mode == 0o600
+
+    def test_state_directory_and_config_permissions(self):
+        """State directory and config are owner-only after save."""
+        with TemporaryDirectory() as tmpdir:
+            config_dir = Path(tmpdir) / "swarm"
+            manager = ConfigManager(config_dir)
+
+            private_key, _ = generate_keypair()
+            manager.save("test-agent", "https://example.com/swarm", private_key)
+
+            assert config_dir.stat().st_mode & 0o777 == 0o700
+            assert (config_dir / "config.yaml").stat().st_mode & 0o777 == 0o600
+
+    def test_load_management_token(self):
+        """Management token is loaded from its dedicated local file."""
+        with TemporaryDirectory() as tmpdir:
+            manager = ConfigManager(Path(tmpdir) / "swarm")
+            manager.config_dir.mkdir()
+            manager.management_token_path.write_text("test-token\n")
+
+            assert manager.load_management_token() == "test-token"
+
+    def test_load_management_token_fails_closed(self):
+        """Missing management credentials never degrade to anonymous access."""
+        with TemporaryDirectory() as tmpdir:
+            manager = ConfigManager(Path(tmpdir) / "swarm")
+
+            with pytest.raises(ConfigError, match="token not configured"):
+                manager.load_management_token()
 
     def test_load_missing_config_raises(self):
         """Loading missing config raises ConfigError."""

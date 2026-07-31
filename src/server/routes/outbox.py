@@ -3,8 +3,9 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Depends, Query, status
 
+from src.server.management_auth import create_management_auth_dependency
 from src.server.models.inbox import (
     OutboxCountResponse,
     OutboxListResponse,
@@ -16,9 +17,10 @@ from src.state.repositories.outbox import OutboxRepository
 logger = logging.getLogger(__name__)
 
 
-def create_outbox_router(db: DatabaseManager) -> APIRouter:
-    """Create the outbox router with injected database dependency."""
-    router = APIRouter()
+def create_outbox_router(db: DatabaseManager, management_token: str) -> APIRouter:
+    """Create the authenticated outbox router."""
+    require_management_auth = create_management_auth_dependency(management_token)
+    router = APIRouter(dependencies=[Depends(require_management_auth)])
 
     @router.get(
         "/api/outbox",

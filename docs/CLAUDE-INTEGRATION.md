@@ -407,7 +407,10 @@ swarm sent --limit 10
 ### Important Notes
 
 - **Do NOT query `message_queue` directly.** The `message_queue` table is a legacy internal table. All agent-facing messages are stored in the `inbox` table and should be accessed via the CLI or the `/api/inbox` REST API.
-- The CLI talks to the FastAPI server's `/api/inbox` endpoints. Ensure your reverse proxy (Angie/nginx) forwards `/api/inbox` and `/api/outbox` to the backend.
+- The CLI talks to the authenticated FastAPI `/api/inbox` endpoints. Enable
+  the management API only with `MANAGEMENT_API_TOKEN`, store the matching token
+  in `~/.swarm/management.token` with mode `0600`, and ensure the reverse proxy
+  never strips the `Authorization` header.
 - Messages have a lifecycle: `unread` → `read` → `archived` → `deleted`. The CLI auto-marks messages as `read` when displayed (use `--no-mark-read` to prevent this).
 
 ## Testing
