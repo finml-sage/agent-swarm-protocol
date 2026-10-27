@@ -53,7 +53,7 @@ class WakeEndpointConfig:
 
     Enabled by default.  Set ``WAKE_EP_ENABLED=false`` to disable.
 
-    ``invoke_method``: how to start the agent -- 'tmux', 'zellij', or 'noop'.
+    ``invoke_method``: how to start the agent -- 'tmux', 'zellij', 'herdr', or 'noop'.
     ``secret``: shared secret for X-Wake-Secret header auth. Empty disables auth.
     ``session_file``: path to session state file for duplicate-invocation guard.
     ``session_timeout_minutes``: how long before an active session is considered expired.
@@ -61,6 +61,8 @@ class WakeEndpointConfig:
     ``zellij_session``: zellij session name for the zellij relay method
         (passed via ``zellij --session``; the focused pane of that
         session receives the notification).
+    ``herdr_target``: Herdr agent name or pane id for the herdr method.
+    ``herdr_bin``: herdr binary path for the herdr method.
     """
 
     enabled: bool = True
@@ -70,6 +72,8 @@ class WakeEndpointConfig:
     session_timeout_minutes: int = 30
     tmux_target: str = ""
     zellij_session: str = ""
+    herdr_target: str = ""
+    herdr_bin: str = "herdr"
 
 
 @dataclass(frozen=True)
@@ -151,6 +155,14 @@ def load_config_from_env() -> ServerConfig:
             "Set it to a zellij session name (e.g. 'codex')."
         )
 
+    herdr_target = os.environ.get("WAKE_EP_HERDR_TARGET", "")
+    herdr_bin = os.environ.get("WAKE_EP_HERDR_BIN", "herdr")
+    if wake_ep_enabled and invoke_method == "herdr" and not herdr_target:
+        raise ValueError(
+            "WAKE_EP_HERDR_TARGET required when WAKE_EP_INVOKE_METHOD is 'herdr'. "
+            "Set it to a Herdr agent name or pane id (e.g. 'w1:p1')."
+        )
+
     private_key_path_env = os.environ.get("AGENT_PRIVATE_KEY_PATH", "")
     private_key_path = Path(private_key_path_env) if private_key_path_env else None
 
@@ -184,5 +196,7 @@ def load_config_from_env() -> ServerConfig:
             ),
             tmux_target=tmux_target,
             zellij_session=zellij_session,
+            herdr_target=herdr_target,
+            herdr_bin=herdr_bin,
         ),
     )

@@ -18,6 +18,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from src.server.config import ServerConfig, load_config_from_env
+from src.server.invoke_herdr import HerdrInvokeConfig
 from src.server.invoke_tmux import TmuxInvokeConfig
 from src.server.invoke_zellij import ZellijInvokeConfig
 from src.server.invoker import AgentInvoker
@@ -59,14 +60,20 @@ def _build_invoker(config: ServerConfig) -> AgentInvoker:
     wep = config.wake_endpoint
     tmux_config = None
     zellij_config = None
+    herdr_config = None
     if wep.invoke_method == "tmux":
         tmux_config = TmuxInvokeConfig(tmux_target=wep.tmux_target)
     elif wep.invoke_method == "zellij":
         zellij_config = ZellijInvokeConfig(zellij_session=wep.zellij_session)
+    elif wep.invoke_method == "herdr":
+        herdr_config = HerdrInvokeConfig(
+            target=wep.herdr_target, herdr_bin=wep.herdr_bin,
+        )
     return AgentInvoker(
         method=wep.invoke_method,
         tmux_config=tmux_config,
         zellij_config=zellij_config,
+        herdr_config=herdr_config,
     )
 
 
