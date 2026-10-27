@@ -64,7 +64,9 @@ def _build_invoker(config: ServerConfig) -> AgentInvoker:
     if wep.invoke_method == "tmux":
         tmux_config = TmuxInvokeConfig(tmux_target=wep.tmux_target)
     elif wep.invoke_method == "zellij":
-        zellij_config = ZellijInvokeConfig(zellij_session=wep.zellij_session)
+        zellij_config = ZellijInvokeConfig(
+            zellij_session=wep.zellij_session, zellij_pane=wep.zellij_pane,
+        )
     elif wep.invoke_method == "herdr":
         herdr_config = HerdrInvokeConfig(
             target=wep.herdr_target, herdr_bin=wep.herdr_bin,

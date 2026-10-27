@@ -428,3 +428,87 @@ class TestConfigZellijValidation:
             config = load_config_from_env()
         assert config.wake_endpoint.enabled is False
         assert config.wake_endpoint.invoke_method == "zellij"
+
+
+# ---------------------------------------------------------------------------
+# Pane targeting (WAKE_EP_ZELLIJ_PANE): both calls carry -p PANE when set
+# ---------------------------------------------------------------------------
+
+
+class TestZellijPaneTarget:
+    async def _argv(self, cfg: ZellijInvokeConfig) -> list[tuple]:
+        procs = [_mock_process(returncode=0), _mock_process(returncode=0)]
+        with (
+            patch(
+                "src.server.invoke_zellij.asyncio.create_subprocess_exec",
+                side_effect=procs,
+            ) as mock_exec,
+            patch("src.server.invoke_zellij.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            await invoke_zellij(_wake_payload(), cfg)
+        return [c[0] for c in mock_exec.call_args_list]
+
+    def test_pane_default_empty(self) -> None:
+        assert ZellijInvokeConfig(zellij_session="codex").zellij_pane == ""
+        assert WakeEndpointConfig().zellij_pane == ""
+
+    @pytest.mark.asyncio
+    async def test_pane_set_targets_both_calls(self) -> None:
+        cfg = ZellijInvokeConfig(zellij_session="codex", zellij_pane="terminal_0")
+        write, send = await self._argv(cfg)
+        assert write[:7] == (
+            "zellij",
+            "--session",
+            "codex",
+            "action",
+            "write-chars",
+            "-p",
+            "terminal_0",
+        )
+        assert len(write) == 8 and "sender-agent-123" in write[7]
+        assert send == (
+            "zellij",
+            "--session",
+            "codex",
+            "action",
+            "send-keys",
+            "-p",
+            "terminal_0",
+            "Enter",
+        )
+
+    @pytest.mark.asyncio
+    async def test_pane_unset_keeps_focused_pane_argv(self) -> None:
+        write, send = await self._argv(ZellijInvokeConfig(zellij_session="codex"))
+        assert "-p" not in write and len(write) == 6
+        assert send == ("zellij", "--session", "codex", "action", "send-keys", "Enter")
+
+    def _load(self, pane: str | None):
+        from src.server.config import load_config_from_env
+
+        env = {
+            "AGENT_ID": "test",
+            "AGENT_ENDPOINT": "https://test.example.com",
+            "AGENT_PUBLIC_KEY": "dGVzdA==",
+            "WAKE_EP_INVOKE_METHOD": "zellij",
+            "WAKE_EP_ZELLIJ_SESSION": "codex",
+        }
+        if pane is not None:
+            env["WAKE_EP_ZELLIJ_PANE"] = pane
+        with patch.dict("os.environ", env, clear=True):
+            return load_config_from_env()
+
+    def test_env_pane_loaded(self) -> None:
+        assert self._load("terminal_0").wake_endpoint.zellij_pane == "terminal_0"
+
+    def test_env_pane_unset_or_blank_is_empty(self) -> None:
+        assert self._load(None).wake_endpoint.zellij_pane == ""
+        assert self._load("   ").wake_endpoint.zellij_pane == ""
+
+    def test_build_invoker_passes_pane(self) -> None:
+        from src.server.app import _build_invoker
+
+        invoker = _build_invoker(self._load("terminal_0"))
+        assert invoker._zellij_config == ZellijInvokeConfig(
+            zellij_session="codex", zellij_pane="terminal_0"
+        )

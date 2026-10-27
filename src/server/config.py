@@ -59,8 +59,9 @@ class WakeEndpointConfig:
     ``session_timeout_minutes``: how long before an active session is considered expired.
     ``tmux_target``: tmux session/window/pane target for the tmux relay method.
     ``zellij_session``: zellij session name for the zellij relay method
-        (passed via ``zellij --session``; the focused pane of that
-        session receives the notification).
+        (passed via ``zellij --session``).
+    ``zellij_pane``: optional zellij pane id (e.g. ``terminal_0``) that
+        receives the notification; empty means the session's focused pane.
     ``herdr_target``: Herdr agent name or pane id for the herdr method.
     ``herdr_bin``: herdr binary path for the herdr method.
     """
@@ -72,6 +73,7 @@ class WakeEndpointConfig:
     session_timeout_minutes: int = 30
     tmux_target: str = ""
     zellij_session: str = ""
+    zellij_pane: str = ""
     herdr_target: str = ""
     herdr_bin: str = "herdr"
 
@@ -155,6 +157,8 @@ def load_config_from_env() -> ServerConfig:
             "Set it to a zellij session name (e.g. 'codex')."
         )
 
+    zellij_pane = os.environ.get("WAKE_EP_ZELLIJ_PANE", "").strip()
+
     herdr_target = os.environ.get("WAKE_EP_HERDR_TARGET", "")
     herdr_bin = os.environ.get("WAKE_EP_HERDR_BIN", "herdr")
     if wake_ep_enabled and invoke_method == "herdr" and not herdr_target:
@@ -196,6 +200,7 @@ def load_config_from_env() -> ServerConfig:
             ),
             tmux_target=tmux_target,
             zellij_session=zellij_session,
+            zellij_pane=zellij_pane,
             herdr_target=herdr_target,
             herdr_bin=herdr_bin,
         ),

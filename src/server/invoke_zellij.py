@@ -4,15 +4,23 @@ Sends a notification string into a running zellij session via
 ``zellij action write-chars`` followed by ``zellij action send-keys
 Enter``.  This is the zellij peer to ``invoke_tmux``: a simple IPC
 mechanism -- no SDK, no AI relay, just format a string and deliver it
-into the focused pane of the named zellij session.
+into a pane of the named zellij session: the pane named by
+``zellij_pane`` when it is set, otherwise the focused pane.
 
 argv shape (verified against zellij v0.44.2
 ``zellij-utils/src/cli.rs::CliAction`` -- lines 728 ``WriteChars`` and
 742 ``SendKeys``; v0.44.2 is the latest release tag on the canonical
 ``zellij-org/zellij`` repo as of 2026-05-08):
 
-  * write-chars: ``zellij --session SESSION action write-chars TEXT``
-  * send-keys:   ``zellij --session SESSION action send-keys "Enter"``
+  * write-chars: ``zellij --session SESSION action write-chars [-p PANE] TEXT``
+  * send-keys:   ``zellij --session SESSION action send-keys [-p PANE] "Enter"``
+
+Without a pane, the text goes to the focused pane.  A session with more
+than one pane (floating panes, editors, plugin panes) can have focus
+elsewhere than the agent, so the wake lands in the wrong pane, and with
+no client attached an untargeted write can reach no pane at all; setting
+``zellij_pane`` (for example ``terminal_0``) pins both calls to the
+agent's pane.  ``-p``/``--pane-id`` exists on both actions in v0.44.2.
 
 The forcing-function semantics mirror tmux ``send-keys``: bytes go
 into the focused pane's PTY master via the same code path real
@@ -37,11 +45,12 @@ class ZellijInvokeConfig:
 
     Attributes:
         zellij_session: The zellij session name (passed via ``--session``).
-            The pane is the focused pane of that session; per-pane
-            targeting via ``--pane-id`` is not exposed here.
+        zellij_pane: Optional pane id (passed via ``-p``), e.g. ``terminal_0``.
+            Empty means the focused pane of the session, as before.
     """
 
     zellij_session: str
+    zellij_pane: str = ""
 
 
 def _format_notification(payload: dict) -> str:
@@ -101,7 +110,7 @@ async def invoke_zellij(payload: dict, config: ZellijInvokeConfig) -> None:
 
     Args:
         payload: The wake payload with message metadata.
-        config: Zellij configuration (session name).
+        config: Zellij configuration (session name, optional pane id).
 
     Raises:
         RuntimeError: If either zellij command fails (non-zero exit
@@ -109,13 +118,17 @@ async def invoke_zellij(payload: dict, config: ZellijInvokeConfig) -> None:
     """
     notification = _format_notification(payload)
     logger.info(
-        "Sending zellij notification to session=%s",
+        "Sending zellij notification to session=%s pane=%s",
         config.zellij_session,
+        config.zellij_pane or "(focused)",
     )
 
     session = config.zellij_session
+    pane_args: tuple[str, ...] = (
+        ("-p", config.zellij_pane) if config.zellij_pane else ()
+    )
 
-    # Step 1: write the notification text into the focused pane
+    # Step 1: write the notification text into the target pane
     await _run_zellij(
         (
             "zellij",
@@ -123,6 +136,7 @@ async def invoke_zellij(payload: dict, config: ZellijInvokeConfig) -> None:
             session,
             "action",
             "write-chars",
+            *pane_args,
             notification,
         ),
         session=session,
@@ -141,6 +155,7 @@ async def invoke_zellij(payload: dict, config: ZellijInvokeConfig) -> None:
             session,
             "action",
             "send-keys",
+            *pane_args,
             "Enter",
         ),
         session=session,
