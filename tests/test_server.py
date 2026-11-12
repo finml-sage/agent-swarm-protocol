@@ -1,22 +1,27 @@
 """Tests for the FastAPI server."""
 import asyncio
 import base64
-import json
-
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi.testclient import TestClient
 
 from src.server.app import create_app
 from src.server.config import (
-    ServerConfig, AgentConfig, RateLimitConfig, WakeConfig, WakeEndpointConfig,
+    AgentConfig,
+    RateLimitConfig,
+    ServerConfig,
+    WakeConfig,
+    WakeEndpointConfig,
 )
 from src.state.database import DatabaseManager
 from src.state.models.member import SwarmMember, SwarmMembership, SwarmSettings
 from src.state.repositories.membership import MembershipRepository
-from tests.conftest import _b64url_encode, _make_jwt
+from tests.conftest import _make_jwt
+
+pytestmark = pytest.mark.usefixtures("bypass_message_auth")
 
 
 SWARM_ID = "550e8400-e29b-41d4-a716-446655440000"

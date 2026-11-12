@@ -2,16 +2,23 @@
 import asyncio
 from pathlib import Path
 
+import pytest
 import toon
 from fastapi.testclient import TestClient
 
 from src.server.app import create_app
 from src.server.config import (
-    AgentConfig, RateLimitConfig, ServerConfig, WakeConfig, WakeEndpointConfig,
+    AgentConfig,
+    RateLimitConfig,
+    ServerConfig,
+    WakeConfig,
+    WakeEndpointConfig,
 )
 from src.state.database import DatabaseManager
 from src.state.models.inbox import InboxStatus
 from src.state.repositories.inbox import InboxRepository
+
+pytestmark = pytest.mark.usefixtures("bypass_message_auth")
 
 
 def _make_config(tmp_path: Path) -> ServerConfig:

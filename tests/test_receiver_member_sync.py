@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from src.server.app import create_app
@@ -32,6 +33,8 @@ from src.state.models.member import SwarmMember, SwarmMembership, SwarmSettings
 from src.state.models.public_key import PublicKeyEntry
 from src.state.repositories.keys import PublicKeyRepository
 from src.state.repositories.membership import MembershipRepository
+
+pytestmark = pytest.mark.usefixtures("bypass_message_auth")
 
 SWARM_ID = "550e8400-e29b-41d4-a716-446655440000"
 LOCAL_AGENT_ID = "test-agent-001"

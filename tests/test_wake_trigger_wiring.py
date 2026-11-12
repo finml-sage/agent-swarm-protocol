@@ -1,20 +1,25 @@
 """Integration tests: WakeTrigger is called after message persistence."""
 import asyncio
-import json
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
+from src.claude.wake_trigger import WakeTrigger
 from src.server.app import create_app
 from src.server.config import (
-    AgentConfig, RateLimitConfig, ServerConfig, WakeConfig, WakeEndpointConfig,
+    AgentConfig,
+    RateLimitConfig,
+    ServerConfig,
+    WakeConfig,
+    WakeEndpointConfig,
     _parse_bool,
 )
-from src.claude.wake_trigger import WakeDecision, WakeTrigger
 from src.state.database import DatabaseManager
 from src.state.repositories.inbox import InboxRepository
+
+pytestmark = pytest.mark.usefixtures("bypass_message_auth")
 
 
 def _make_config(tmp_path: Path, wake_enabled: bool = False) -> ServerConfig:
