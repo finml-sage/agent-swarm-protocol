@@ -43,6 +43,7 @@ class WakeTrigger:
     def __init__(
         self, db_manager: DatabaseManager, wake_endpoint: str,
         preferences: NotificationPreferences, wake_timeout: float = 5.0,
+        wake_secret: str = "",
     ) -> None:
         if not db_manager.is_initialized:
             raise WakeTriggerError("Database not initialized")
@@ -50,6 +51,9 @@ class WakeTrigger:
             raise WakeTriggerError("Wake endpoint required")
         self._db = db_manager
         self._wake_endpoint = wake_endpoint
+        # Sent as X-Wake-Secret so a wake endpoint with WAKE_EP_SECRET set
+        # accepts the server's own trigger. Empty sends no header.
+        self._wake_secret = wake_secret
         self._preferences = preferences
         self._wake_timeout = wake_timeout
         self._context_loader = ContextLoader(db_manager)
@@ -103,7 +107,10 @@ class WakeTrigger:
         }
         try:
             async with httpx.AsyncClient(timeout=self._wake_timeout) as client:
-                response = await client.post(self._wake_endpoint, json=payload)
+                headers = {"X-Wake-Secret": self._wake_secret} if self._wake_secret else {}
+                response = await client.post(
+                    self._wake_endpoint, json=payload, headers=headers
+                )
                 if response.status_code >= 400:
                     raise WakeTriggerError(f"Wake endpoint returned {response.status_code}: {response.text}")
         except httpx.HTTPError as exc:

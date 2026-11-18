@@ -52,6 +52,7 @@ def _build_wake_trigger(
         wake_endpoint=config.wake.endpoint,
         preferences=NotificationPreferences(),
         wake_timeout=config.wake.timeout,
+        wake_secret=config.wake_endpoint.secret,
     )
 
 

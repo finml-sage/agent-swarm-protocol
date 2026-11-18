@@ -228,3 +228,51 @@ class TestWakeTrigger:
 
             with pytest.raises(WakeTriggerError, match="Wake endpoint returned 500"):
                 await trigger.process_message(sample_message)
+
+
+class TestWakeTriggerSecretHeader:
+    """The trigger authenticates to a wake endpoint that has WAKE_EP_SECRET set."""
+
+    @pytest.fixture
+    async def db_manager(self, tmp_path: Path) -> DatabaseManager:
+        db = DatabaseManager(tmp_path / "test.db")
+        await db.initialize()
+        return db
+
+    @pytest.fixture
+    def sample_message(self) -> InboxMessage:
+        return InboxMessage(
+            message_id="msg-secret-1",
+            swarm_id="swarm-1",
+            sender_id="agent-b",
+            message_type="message",
+            content="hello",
+            received_at=datetime.now(timezone.utc),
+            status=InboxStatus.UNREAD,
+        )
+
+    async def _post_headers(self, db_manager, sample_message, **kwargs):
+        with patch("src.claude.wake_trigger.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.__aenter__.return_value = mock_instance
+            mock_instance.__aexit__.return_value = None
+            mock_instance.post.return_value = AsyncMock(status_code=200, text="")
+            mock_client.return_value = mock_instance
+            trigger = WakeTrigger(
+                db_manager,
+                "http://localhost:8080/api/wake",
+                NotificationPreferences(),
+                **kwargs,
+            )
+            await trigger.process_message(sample_message)
+            return mock_instance.post.call_args.kwargs["headers"]
+
+    @pytest.mark.asyncio
+    async def test_secret_sent_as_header(self, db_manager, sample_message) -> None:
+        headers = await self._post_headers(db_manager, sample_message, wake_secret="s3cret")
+        assert headers == {"X-Wake-Secret": "s3cret"}
+
+    @pytest.mark.asyncio
+    async def test_no_secret_no_header(self, db_manager, sample_message) -> None:
+        headers = await self._post_headers(db_manager, sample_message)
+        assert headers == {}
